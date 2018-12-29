@@ -58,11 +58,19 @@ io.on("connection", function(socket) {
         socket.emit("room", room);
     });
 
+    socket.on("leave", function(data) {
+        if (socket.room) {
+            manager.leaveRoom(socket);
+        }
+    });
+
     socket.on("action", function(data) {
         var room = socket.room;
         if (!room) return;
 
-        room.flow.phase.handle(socket, room, data.type, data.payload);
+        if (room["__msg__" + data.type]) {
+            room["__msg__" + data.type](socket, data.payload);
+        }
     });
 });
 

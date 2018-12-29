@@ -1,36 +1,281 @@
-import { PhaseManager, LobbyPhase } from "./Phase";
-
 const State = {
-    LOBBY: 0,
-    ROLE_SELECTION: 1
+    LOBBY: "LOBBY",
+    ROLE_SELECTION: "ROLE_SELECTION",
+    PRE_GAME: "PRE_GAME",
+    NIGHT_TRANSITION: "NIGHT_TRANSITION",
+    NIGHT: "NIGHT",
+    DAY_TRANSITION: "DAY_TRANSITION",
+    DAY_CALLOUTS: "DAY_CALLOUTS",
+    DISCUSSION: "DISCUSSION",
+    TRIAL: "TRIAL",
+    EXECUTION: "EXECUTION",
+    GAME_OVER: "GAME_OVER"
 };
+
+const Role = {
+    VILLAGER: "VILLAGER",
+    WEREWOLF: "WEREWOLF",
+    HEALER: "HEALER",
+    SEER: "SEER" 
+};
+
+const Alignment = {
+    GOOD: "GOOD",
+    EVIL: "EVIL",
+    CHAOS: "CHAOS",
+    NEUTRAL: "NEUTRAL"
+};
+
+const dict = function(){
+    var di = {};
+    for (var i = 0; i < arguments.length; i++) {
+        di[arguments[i][0]] = arguments[i][1];
+    }
+    return di;
+};
+
+const NightPlayOrder = [
+    Role.WEREWOLF,
+    Role.HEALER,
+    Role.SEER
+];
+
+const NightDetails = dict(
+    [Role.WEREWOLF, {
+        summon_message: "Werewolves, open your eyes. Pick a player to kill.",
+        end_message: "Good night, werewolves.",
+        timer: 30000
+    }],
+    [Role.HEALER, {
+        summon_message: "Healer, wake up. Pick a player to heal.",
+        end_message: "Good night, healer.",
+        timer: 10000
+    }],
+    [Role.SEER, {
+        summon_message: "Fortune teller, you are summoned. Pick a player to check",
+        end_message: "Good night, fortune teller.",
+        timer: 10000
+    }]
+);
+
+function shuffle(a) {
+    var j, x, i;
+    for (i = a.length - 1; i > 0; i--) {
+        j = Math.floor(Math.random() * (i + 1));
+        x = a[i];
+        a[i] = a[j];
+        a[j] = x;
+    }
+    return a;
+}
+
+function randomOf(arr) {
+    return arr[Math.floor(Math.random() * arr.length)];
+}
 
 export class GameRoom {
     constructor() {
         this.clients = [];
         this.players = [];
+        this.NightPlayOrder = [];
+        
+        this.roles = [Role.WEREWOLF, Role.WEREWOLF, [Role.VILLAGER, Role.HEALER]];
         
         this.roomId = Math.round(Math.random() * 900000 + 100000).toString();
-
-        this.state = State.LOBBY;
     }
 
     onInit() {
         console.log("Room was initialized", this.roomId);
+        this.reset();
     }
 
     onJoin(client) {
         console.log(client.id, "joined", this.roomId);
         this.syncClientList();
+        this.syncGamestate();
     }
 
     onLeave(client) {
         console.log(client.id, "left", this.roomId);
         this.syncClientList();
+        this.syncGamestate();
     }
 
     onDispose(client) {
         console.log("Disposed room", this.roomId);
+    }
+
+    setTimer(millis) {
+        if (!millis)
+            this.timer = null;
+        else
+            this.timer = new Date().getTime() + millis;
+    }
+
+    setState(newState, timer, timer_hidden, noUpdate) {
+        this.state = newState;
+        this.setTimer(timer);
+        this.timer_shown = !timer_hidden;
+        
+        if (!noUpdate) {
+            this.syncGamestate();
+        }
+    }
+
+    timerDue() {
+        return this.timer && new Date().getTime() > this.timer;
+    }
+
+    /*
+    Called every 500ms and should update the game states
+    */
+    onLoop() {
+        switch (this.state) {
+            case State.LOBBY:
+                this.onLoop_LOBBY();
+                break;
+            case State.ROLE_SELECTION:
+                this.onLoop_ROLESELECTION();
+                break;
+            case State.PRE_GAME:
+                this.onLoop_PREGAME();
+                break;
+            case State.NIGHT_TRANSITION:
+                this.onLoop_NIGHTTRANSITION();
+                break;
+            case State.NIGHT:
+                this.onLoop_NIGHT();
+                break;
+        }
+    }
+
+    // Lobby state loop
+    onLoop_LOBBY() {
+        if (this.hostReady && this.roles.length >= this.clients.length) {
+            // In order to start we verify that the roles are sufficient for the players
+            this.startRoleSelection();
+        }
+    }
+
+    onLoop_ROLESELECTION() {
+        if (this.timerDue()) {
+            this.enterPregame();
+        }
+    }
+
+    onLoop_PREGAME() {
+        if (this.timerDue()) {
+            this.startNightTransition();
+        }
+    }
+
+    onLoop_NIGHTTRANSITION() {
+        if (this.timerDue()) {
+            this.resetNight();
+        }
+    }
+
+    onLoop_NIGHT() {
+        var active = this.players.filter(x => x.active); // Getting cached active values
+        console.log("Active players", active.map(x => x.id));
+        
+        if ((active.length == 0 || this.timerDue()) && this.minTime <= new Date().getTime()
+            && !this.nightActionDone && this.nightActionStarted) {
+            this.nightActionDone = true;
+            
+
+            this.setTimer(null);
+            this.speak(NightDetails[this.NightPlayOrder[this.nightIndex]].end_message);
+            
+            setTimeout(() => {
+                console.log("No active players left, incrementing nightIndex");
+                this.endNightAction();
+                console.log("Current nightIndex:", this.nightIndex);
+                
+                if (this.nightIndex < this.NightPlayOrder.length) {
+                    console.log("Continuing to play. Current night order", this.NightPlayOrder[this.nightIndex]);
+                    this.startNightAction();
+                }
+                else {
+                    this.setState(State.DAY_TRANSITION);
+                }
+            }, 2000);            
+        }
+    }
+
+    startRoleSelection() {
+        this.calculateNightOrder();
+        this.speak("Roles are now assigned");
+
+        // Shuffling the roles deck (cards deck)
+        var deck = this.roles.slice(0, this.clients.length);
+        for (var i = 0; i < 100; i++) {
+            shuffle(deck);
+            console.log(deck);
+        }
+
+        // Initializing our playerl list (Note, NOT the client list. It's different)
+        this.players.length = 0;
+        for (var i in this.clients) {
+            var { id, image, nickname } = this.clients[i];
+            var role = deck[i];
+
+            this.players.push(createPlayer(id, nickname, image, role));
+        }
+        console.log(this.players);
+
+        // Setting the new state
+        this.setState(State.ROLE_SELECTION, 10000);
+    }
+
+    calculateNightOrder() {
+        var r = [];
+        for (var role of this.roles) {
+            if (role.constructor.name == "String") {
+                if (!~r.indexOf(role)) {
+                    r.push(role);
+                }
+            }
+            else {
+                for (var rrole of role) {
+                    if (!~r.indexOf(rrole)) {
+                        r.push(rrole);
+                    }
+                }
+            }
+        }
+
+        this.NightPlayOrder.length = 0;
+        for (var play of NightPlayOrder) {
+            if (~r.indexOf(play)) {
+                this.NightPlayOrder.push(play);
+            }
+        }
+    }
+
+    startNightTransition() {
+        this.setState(State.NIGHT_TRANSITION, 3000);
+        this.speak("The night shall now begin");
+    }
+
+    enterPregame() {
+        this.setState(State.PRE_GAME, 5000, true);
+        this.speak("Get ready to play...");
+    }
+
+    getActivePlayers() {
+        var ps = [];
+        for (var p of this.players) {
+            if (p.isActive(this)) {
+                p.active = true;
+                ps.push(p);
+            }
+            else {
+                p.active = false;
+            }
+        }
+        console.log("Got active players");
+        return ps;
     }
 
     syncClientList() {
@@ -38,7 +283,7 @@ export class GameRoom {
             return {
                 name: x.nickname,
                 id: x.id,
-                img: x.image
+                image: x.image
             }
         });
 
@@ -49,23 +294,127 @@ export class GameRoom {
     }
 
     syncGamestate() {
-        if (!this.state) return; // No synchronizing without the state manager
-
+        console.log("Synchronizing game state");
         var gameState = {
-            state: this.state
+            phase: this.state,
+            players: this.players.map(x => x.objectify()),
+            timer: this.timer_shown ? this.timer : null
         };
+        console.log("Made gameState object");
 
         for (var client of this.clients) {
+            console.log("Sending gameState to", client.id);
             client.emit("state", gameState);
+        }
+        console.log("Finished synchronizing gameState");
+    }
+
+    speak(message) {
+        this.clients[0].emit("speak", message);
+    }
+
+    // Initializes the room as if the lobby phase started right now
+    reset() {
+        this.hostReady = false;
+
+        this.state = State.LOBBY;
+        this.timer = null;
+        this.timer_shown = false;
+
+        this.night = 0;
+
+        this.minTime = 0;
+    }
+
+    // Sets the game up for a new 
+    resetNight() {
+        this.nightIndex = 0;
+        this.nightActionStarted = false;
+        this.setState(State.NIGHT, null, null, true);
+
+        for (var p of this.players) {
+            p.resetNight();
+        }
+
+        this.startNightAction();
+    }
+
+    startNightAction() {
+        var active = this.getActivePlayers();
+        this.nightActionDone = false;
+        this.nightActionStarted = true;
+
+        this.minTime = new Date().getTime() + Math.random() * 9000;
+        this.setTimer(NightDetails[this.NightPlayOrder[this.nightIndex]].timer);
+
+        this.syncGamestate();
+        this.speak(
+            NightDetails[this.NightPlayOrder[this.nightIndex]].summon_message);
+    }
+
+    endNightAction() {
+        this.nightActionStarted = false;
+        console.log(this);
+        console.log(this.nightIndex);
+        this.nightIndex++;
+        console.log(this.nightIndex);
+    }
+
+    __msg__start_game(client, data) {
+        console.log("Received START_GAME");
+        if (this.state != State.LOBBY) return; // Can only start game while in lobby
+        if (client.id != this.clients[0].id) return; // Only the host can start the game
+
+        this.hostReady = true;
+    }
+
+    __msg__kick(client, data) {
+        if (this.state != State.LOBBY) return; // Can only kick while in lobby
+        if (client.id != this.clients[0].id) return; // Only the host can kick players
+
+        var kicked = this.getClient(data);
+        if (kicked) {
+            kicked.emit("kick");
         }
     }
 
-    __msg
+    __msg__night_action(client, data) {
+        console.log("Night action:", data);
+        var p = this.getPlayer(client.id);
+        if (p) {
+            p.setTarget(data, this);
+        }
+
+        console.log("Getting active players");
+        this.getActivePlayers();
+        console.log("Active players returned");
+        this.syncGamestate();
+        console.log("Executed night action");
+    }
+
+    getPlayer(id) {
+        var p = this.players.filter(x => x.id == id);
+        if (p.length == 0) return null;
+        return p[0];
+    }
+
+    getClient(id) {
+        var c = this.clients.filter(x => x.id == id);
+        if (c.length == 0) return null;
+        return c[0];
+    }
 }
 
 export class RoomManager {
     constructor() {
         this.rooms = [];
+        setInterval(this.checkOnRooms.bind(this), 300);
+    }
+
+    checkOnRooms() {
+        for (var r of this.rooms) {
+            r.onLoop.bind(r)();
+        }
     }
 
     dump() {
@@ -128,3 +477,124 @@ export class RoomManager {
         }
     }
 }
+
+class Player {
+    constructor(id, name, image) {
+        this.id = id;
+        this.name = name;
+        this.image = image;
+
+        this.dead = false;
+
+        this.active = false;
+    }
+
+    init() { }
+    role() { }
+
+    resetNight() {
+        this.target = null;
+    }
+
+    isActive(game) {
+        console.log("Checking if", this.name, "is active");
+        console.log("Current order", game.NightPlayOrder[game.nightIndex], "my order", this.role);
+        console.log("am i dead", this.dead);
+        console.log("Did i already play", this.target);
+        return game.NightPlayOrder[game.nightIndex] == this.role && !this.dead && this.target === null;
+    }
+
+    setTarget(input, game) {
+        if (input === false) {
+            this.target = false;
+            return;
+        }
+        var p = game.getPlayer(input);
+        if (p != null && !p.dead) {
+            this.target = p;
+        }
+    }
+
+    objectify() {
+        return {
+            name: this.name,
+            id: this.id,
+            image: this.image,
+            dead: this.dead,
+            active: this.active,
+            role: this.role
+        }
+    }
+}
+
+class Villager extends Player {
+
+    init() {
+        this.role = Role.VILLAGER;
+        this.alignment = Alignment.GOOD;
+        this.seer_result = Alignment.GOOD;
+    }
+
+    isActive() {
+        return false;
+    }
+}
+
+class Werewolf extends Player {
+    init() {
+        this.role = Role.WEREWOLF;
+        this.alignment = Alignment.EVIL;
+        this.seer_result = Alignment.EVIL;
+    }
+
+    isActive(game) {
+
+        if (game.NightPlayOrder[game.nightIndex] != this.role) return false;
+        if (this.dead) return false;
+
+        var wolves = game.players.filter(x => x.role == this.role && x.target != this.target);
+        if (wolves.length == 0 && this.target != null) return false;
+
+        return true;
+    }
+}
+
+class Healer extends Player {
+    init() {
+        this.role = Role.HEALER;
+        this.alignment = Alignment.GOOD;
+        this.seer_result = Alignment.GOOD;
+    }
+}
+
+class Seer extends Player {
+    init() {
+        this.role = Role.SEER;
+        this.alignment = Alignment.GOOD;
+        this.seer_result = Alignment.GOOD;
+    }
+
+    setTarget(input, game) {
+        if (input === true) {
+            this.target = true;
+        }
+        else {
+            game.getClient(this.id).emit("seer_result", game.getPlayer(input));
+        }
+    }
+}
+
+const RoleGenerators = dict(
+    [Role.VILLAGER, Villager],
+    [Role.WEREWOLF, Werewolf],
+    [Role.HEALER, Healer],
+    [Role.SEER, Seer]
+)
+
+const createPlayer = (id, name, image, role) => {
+    var player = new (RoleGenerators[role])(id, name, image);
+    player.init();
+    return player;
+};
+
+export { createPlayer, Role };
