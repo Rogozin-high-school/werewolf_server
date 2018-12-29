@@ -26,6 +26,13 @@ const Alignment = {
     NEUTRAL: "NEUTRAL"
 };
 
+const Power = {
+    NONE: 0,
+    BASIC: 1,
+    POWERFUL: 2,
+    UNSTOPPABLE: 3
+}
+
 const dict = function(){
     var di = {};
     for (var i = 0; i < arguments.length; i++) {
@@ -35,6 +42,12 @@ const dict = function(){
 };
 
 const NightPlayOrder = [
+    Role.WEREWOLF,
+    Role.HEALER,
+    Role.SEER
+];
+
+const NightCalculationOrder = [
     Role.WEREWOLF,
     Role.HEALER,
     Role.SEER
@@ -73,13 +86,17 @@ function randomOf(arr) {
     return arr[Math.floor(Math.random() * arr.length)];
 }
 
+function max(arr, evaluator) {
+    return arr.reduce((prev, current) => evaluator(prev) > evaluator(current) ? prev : current);
+}
+
 export class GameRoom {
     constructor() {
         this.clients = [];
         this.players = [];
         this.NightPlayOrder = [];
         
-        this.roles = [Role.WEREWOLF, Role.WEREWOLF, [Role.VILLAGER, Role.HEALER]];
+        this.roles = [Role.WEREWOLF, Role.HEALER, [Role.VILLAGER, Role.HEALER]];
         
         this.roomId = Math.round(Math.random() * 900000 + 100000).toString();
     }
@@ -146,6 +163,12 @@ export class GameRoom {
             case State.NIGHT:
                 this.onLoop_NIGHT();
                 break;
+            case State.DAY_TRANSITION:
+                this.onLoop_DAYTRANSITION();
+                break;
+            case State.DAY_CALLOUTS:
+                this.onLoop_DAYCALLOUTS();
+                break;
         }
     }
 
@@ -197,9 +220,50 @@ export class GameRoom {
                     this.startNightAction();
                 }
                 else {
-                    this.setState(State.DAY_TRANSITION);
+                    this.endNight();
                 }
             }, 2000);            
+        }
+    }
+
+    onLoop_DAYTRANSITION() {
+        if (this.timerDue()) {
+            this.setState(State.DAY_CALLOUTS, 1);
+        }
+    }
+
+    onLoop_DAYCALLOUTS() {
+        if (this.timerDue()) {
+            this.nextDayCallout();
+        }
+    }
+
+    endNight() {
+        this.calculateWerewolfKill();
+        this.calculateNightActions();
+        this.callouts = this.calculateNightDeaths() || ["No one was killed tonight"];
+        console.log(this.players);
+
+        this.setState(State.DAY_TRANSITION, 5000, true);
+        this.speak("Koo Koo Ree Koo, I am a chicken. Good morning village");
+    }
+
+    nextDayCallout() {
+        var callout = this.callouts.shift();
+        if (!callout) {
+            this.setState(State.DISCUSSION, 60 * 1000 * 3.5);
+        }
+        else if (callout.constructor.name == "String") {
+            this.speak(callout);
+            this.message = callout;
+            this.syncGamestate();
+            this.setTimer(5000);
+        }
+        else if (callout.constructor.name == "Array") {
+            if (callout[0] == "deadsync") {
+                callout[1].dead_sync = callout[1].dead;
+            }
+            setTimeout(this.nextDayCallout.bind(this), 1);
         }
     }
 
@@ -254,8 +318,8 @@ export class GameRoom {
     }
 
     startNightTransition() {
-        this.setState(State.NIGHT_TRANSITION, 3000);
-        this.speak("The night shall now begin");
+        this.setState(State.NIGHT_TRANSITION, 4000);
+        this.speak("Woof woof, I am a scary werewolf. The night begins now");
     }
 
     enterPregame() {
@@ -278,6 +342,50 @@ export class GameRoom {
         return ps;
     }
 
+    calculateWerewolfKill() {
+        var wwVotes = this.players.filter(x => x.role == Role.WEREWOLF && x.target).map(x => x.target);
+        var votes = [...new Set(wwVotes)].map(y => [y, wwVotes.filter(n => n == y).length]); // Counting the votes
+        var targets = [];
+        for (var vote of votes) {
+            if (targets.length == 0 || targets[0][1] == vote[1]) {
+                targets.push(vote);
+            }
+            else if (targets[0][1] < vote[1]) {
+                targets.length = 0;
+                targets.push(vote);
+            }
+        }
+        
+        if (targets.length == 0) return;
+
+        var target = randomOf(targets)[0];
+        var attacker = randomOf(this.players.filter(x => x.role == Role.WEREWOLF && x.target == target));
+        attacker.werewolfKill(target);
+    }
+
+    calculateNightActions() {
+        console.log("Calculating night actions");
+        for (var role of NightCalculationOrder) {
+            console.log("Order:", role);
+            for (var player of this.players.filter(x => x.role == role)) {
+                if (player.canPerformRole(this)) {
+                    player.performRole(this);
+                }
+            }
+        }
+    }
+
+    calculateNightDeaths() {
+        var day_callouts = [];
+        for (var player of this.players.filter(x => !x.dead)) {
+            var data = player.calculateKill();
+            if (data) {
+                day_callouts.push(...data);
+            }
+        }
+        return day_callouts;
+    }
+
     syncClientList() {
         var clients = this.clients.map(x => {
             return {
@@ -298,7 +406,8 @@ export class GameRoom {
         var gameState = {
             phase: this.state,
             players: this.players.map(x => x.objectify()),
-            timer: this.timer_shown ? this.timer : null
+            timer: this.timer_shown ? this.timer : null,
+            message: this.message || null
         };
         console.log("Made gameState object");
 
@@ -485,15 +594,21 @@ class Player {
         this.image = image;
 
         this.dead = false;
+        this.dead_sync = false;
 
         this.active = false;
+
+        this.attackers = [];
+        this.healers = [];
     }
 
     init() { }
-    role() { }
+    performRole() { }
 
     resetNight() {
         this.target = null;
+        this.attackers.length = 0;
+        this.healers.length = 0;
     }
 
     isActive(game) {
@@ -515,12 +630,44 @@ class Player {
         }
     }
 
+    canPerformRole(game) {
+        return !this.dead && this.target;
+    }
+
+    calculateKill() {
+        var attack = this.attackers.length ? max(this.attackers, x => x[1]) : null;
+        var defense = this.healers.length ? max(this.healers, x => x[1]) : null;
+
+        if (attack) {
+            if (!defense || attack[1] > defense[1]) {
+                // Killed
+                this.kill();
+
+                var callouts = ["Tonight, we found " + this.name + ", dead in their home."];
+                for (var a in this.attackers) {
+                    callouts.push((a == 0 ? "They were apparently " : "They were also ") + 
+                                    (this.attackers[a][2] || "attacked."));
+                }
+                callouts.push(["deadsync", this]);
+                callouts.push("Rest in peace, " + this.name);
+                return callouts;
+            }
+            else {
+                // Saved
+            }
+        }
+    }
+
+    kill() {
+        this.dead = true;
+    }
+
     objectify() {
         return {
             name: this.name,
             id: this.id,
             image: this.image,
-            dead: this.dead,
+            dead: this.dead_sync,
             active: this.active,
             role: this.role
         }
@@ -557,6 +704,13 @@ class Werewolf extends Player {
 
         return true;
     }
+
+    werewolfKill(target) {
+        if (this.canPerformRole()) {
+            console.log(this.name, "attacking", target.name);
+            target.attackers.push([this, Power.BASIC, "attacked by a werewolf"]);
+        }
+    }
 }
 
 class Healer extends Player {
@@ -564,6 +718,11 @@ class Healer extends Player {
         this.role = Role.HEALER;
         this.alignment = Alignment.GOOD;
         this.seer_result = Alignment.GOOD;
+    }
+
+    performRole() {
+        console.log(this.name, "healing", this.target.name);
+        this.target.healers.push([this, Power.BASIC]);
     }
 }
 
