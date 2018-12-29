@@ -246,6 +246,14 @@ export class GameRoom {
 
         this.setState(State.DAY_TRANSITION, 5000, true);
         this.speak("Koo Koo Ree Koo, I am a chicken. Good morning village");
+
+        this.broadcaseNightMessages();
+    }
+
+    broadcaseNightMessages() {
+        for (var player of this.players.filter(x => !x.dead_sync)) {
+            this.getClient(player.id).emit("open_messages", player.messages);
+        }
     }
 
     nextDayCallout() {
@@ -600,6 +608,8 @@ class Player {
 
         this.attackers = [];
         this.healers = [];
+
+        this.messages = [];
     }
 
     init() { }
@@ -607,8 +617,10 @@ class Player {
 
     resetNight() {
         this.target = null;
+
         this.attackers.length = 0;
         this.healers.length = 0;
+        this.messages.length = 0;
     }
 
     isActive(game) {
@@ -653,13 +665,17 @@ class Player {
                 return callouts;
             }
             else {
-                // Saved
+                this.sendMessage("Someone attacked you but you were saved!")
             }
         }
     }
 
     kill() {
         this.dead = true;
+    }
+
+    sendMessage(text) {
+        this.messages.push(text);
     }
 
     objectify() {
@@ -669,7 +685,8 @@ class Player {
             image: this.image,
             dead: this.dead_sync,
             active: this.active,
-            role: this.role
+            role: this.role,
+            messages: this.messages
         }
     }
 }
