@@ -9,10 +9,11 @@ var noam = game.createPlayer("44444", "Noam", "44444.png", game.Role.VILLAGER);
 
 room.players = [yotam, nirit, avi, noam];
 
-avi.setTarget("22222", room);
+nirit.dead = avi.dead = noam.dead = true;
 
-room.calculateWerewolfKill();
-room.calculateNightActions();
-room.calculateNightDeaths();
-
-console.log(room);
+var f = room.getWinningFaction();
+console.log(f);
+console.log(yotam.isVictorious(f));
+console.log(nirit.isVictorious(f));
+console.log(avi.isVictorious(f));
+console.log(noam.isVictorious(f));
