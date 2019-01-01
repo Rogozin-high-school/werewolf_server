@@ -306,7 +306,7 @@ export class GameRoom {
         }
 
         this.setState(State.DAY_TRANSITION, 5000, true);
-        this.speak("Koo Koo Ree Koo, I am a chicken. Good morning village");
+        //this.speak("Koo Koo Ree Koo, I am a chicken. Good morning village");
 
         this.broadcaseNightMessages();
     }
@@ -346,7 +346,7 @@ export class GameRoom {
 
     startRoleSelection() {
         this.calculateNightOrder();
-        this.speak("Roles are now assigned");
+        this.speak("Players, prepare for your roles!");
 
         // Shuffling the roles deck (cards deck)
         var deck = this.roles.slice(0, this.clients.length);
@@ -358,13 +358,11 @@ export class GameRoom {
         // Initializing our playerl list (Note, NOT the client list. It's different)
         this.players.length = 0;
         for (var i in this.clients) {
-            var { id, image, nickname } = this.clients[i];
+            var { id, image, nickname, color } = this.clients[i];
             var role = this.getRole(deck[i]);
 
-            this.players.push(createPlayer(id, nickname, image, role));
+            this.players.push(createPlayer(id, nickname, image, color, role));
         }
-        
-        this.players.push(createPlayer("11111", "Lior", "https://semantic-ui.com/images/avatar2/large/rachel.png", Role.VILLAGER));
 
         // Setting the new state
         this.setState(State.ROLE_SELECTION, 10000);
@@ -397,7 +395,7 @@ export class GameRoom {
 
     startNightTransition() {
         this.setState(State.NIGHT_TRANSITION, 4000);
-        this.speak("Woof woof, I am a scary werewolf. The night begins now");
+        // this.speak("Woof woof, I am a scary werewolf. The night begins now");
     }
 
     enterPregame() {
@@ -469,7 +467,8 @@ export class GameRoom {
             return {
                 name: x.nickname,
                 id: x.id,
-                image: x.image
+                image: x.image,
+                color: x.color
             }
         });
 
@@ -707,7 +706,7 @@ export class GameRoom {
             }
             this.winning_faction = f;
 
-            this.setState(State.GAME_OVER, 10000);
+            this.setState(State.GAME_OVER, 16000);
             return true;
         }
 
@@ -789,10 +788,11 @@ export class RoomManager {
 }
 
 class Player {
-    constructor(id, name, image) {
+    constructor(id, name, image, color) {
         this.id = id;
         this.name = name;
         this.image = image;
+        this.color = color;
 
         this.dead = false;
         this.dead_sync = false;
@@ -885,6 +885,7 @@ class Player {
             name: this.name,
             id: this.id,
             image: this.image,
+            color: this.color,
             dead: this.dead_sync,
             active: this.active,
             role: this.role,
@@ -976,8 +977,8 @@ const RoleGenerators = dict(
     [Role.SEER, Seer]
 )
 
-const createPlayer = (id, name, image, role) => {
-    var player = new (RoleGenerators[role])(id, name, image);
+const createPlayer = (id, name, image, color, role) => {
+    var player = new (RoleGenerators[role])(id, name, image, color);
     player.init();
     return player;
 };

@@ -11,6 +11,17 @@ const { RoomManager, GameRoom } = require("./src/Room");
 
 const manager = new RoomManager();
 
+const libmoji = require("./src/libmoji");
+
+function randomAvatar() {
+    let gender = libmoji.genders[libmoji.randInt(2)];
+    let style = [ 'cm', 5 ];
+    let traits = libmoji.randTraits(libmoji.getTraits(gender[0],style[0]));
+    let outfit = libmoji.randOutfit(libmoji.getOutfits(libmoji.randBrand(libmoji.getBrands(gender[0]))));
+
+    return libmoji.buildPreviewUrl("head",1,gender[1],style[1],0,traits,outfit);
+}
+
 io.on("connection", function(socket) {
     console.log("Client has connected");
     socket.emit("connected");
@@ -22,29 +33,21 @@ io.on("connection", function(socket) {
         }
     });
 
-    socket.on("nickname", function(data) {
+    socket.on("details", function(data) {
         console.log("Received nickname ", socket.id, data);
-        socket.nickname = data;
-
-        var imgs = [
-            "https://semantic-ui.com/images/avatar/small/steve.jpg",
-            "https://semantic-ui.com/images/avatar2/small/matthew.png",
-            "https://semantic-ui.com/images/avatar2/large/rachel.png",
-            "https://semantic-ui.com/images/avatar2/small/elyse.png",
-            "https://semantic-ui.com/images/avatar/large/elliot.jpg",
-            "https://semantic-ui.com/images/avatar/large/daniel.jpg",
-            "https://semantic-ui.com/images/avatar2/large/molly.png",
-            "https://semantic-ui.com/images/avatar/large/jenny.jpg",
-            "https://semantic-ui.com/images/avatar/large/helen.jpg",
-            "https://semantic-ui.com/images/avatar/large/veronika.jpg"
-        ];
-        socket.image = imgs[Math.floor(Math.random()*imgs.length)];
+        socket.nickname = data.nickname || "foo";
+        socket.color = data.color || "skyblue";
+        socket.image = data.avatar || randomAvatar();
     });
 
     socket.on("join", function(data) {
         var room = manager.getRoom(data);
         if (!room) {
             socket.emit("join_error", "Could not find party ID");
+            return;
+        }
+        if (room.state != "LOBBY") {
+            socket.emit("join_error", "Room is in the middle of a game");
             return;
         }
 
@@ -71,6 +74,12 @@ io.on("connection", function(socket) {
         if (room["__msg__" + data.type]) {
             room["__msg__" + data.type](socket, data.payload);
         }
+    });
+
+    socket.on("bitmoji", function() {
+        var data = [];
+        for (var i = 0; i < 30; i++) data.push(randomAvatar());
+        socket.emit("bitmoji", data);
     });
 });
 
