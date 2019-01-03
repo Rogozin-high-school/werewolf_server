@@ -121,7 +121,7 @@ export class GameRoom {
         this.players = [];
         this.NightPlayOrder = [];
         
-        this.roles = [Role.WEREWOLF, Role.WITCH];
+        this.roles = [Role.WEREWOLF, Role.WITCH, Role.WEREWOLF];
         
         this.roomId = "11111";Math.round(Math.random() * 900000 + 100000).toString();
     }
@@ -438,7 +438,7 @@ export class GameRoom {
     }
 
     calculateWerewolfKill() {
-        var wwVotes = this.players.filter(x => x.role == Role.WEREWOLF && x.target).map(x => x.target);
+        var wwVotes = this.players.filter(x => x.role == Role.WEREWOLF && x.target && !x.witched).map(x => x.target);
         var votes = [...new Set(wwVotes)].map(y => [y, wwVotes.filter(n => n == y).length]); // Counting the votes
         var targets = [];
         for (var vote of votes) {
@@ -450,12 +450,21 @@ export class GameRoom {
                 targets.push(vote);
             }
         }
-        
-        if (targets.length == 0) return;
 
-        var target = randomOf(targets)[0];
-        var attacker = randomOf(this.players.filter(x => x.role == Role.WEREWOLF && x.target == target));
-        attacker.werewolfKill(target);
+        var target = null;
+        
+        if (targets.length != 0) {
+            target = randomOf(targets)[0];
+            var attacker = randomOf(this.players.filter(x => x.role == Role.WEREWOLF && x.target == target));
+            attacker.werewolfKill(target);
+        }
+
+        // TODO: Test this piece of code? 
+        for (var ww of this.players.filter(x => x.role == Role.WEREWOLF && x.target && x.witched)) {
+            if (ww.target != target) {
+                ww.werewolfKill(ww.target);
+            }
+        }
     }
 
     calculateNightActions() {
@@ -840,6 +849,8 @@ class Player {
         this.attackers.length = 0;
         this.healers.length = 0;
         this.messages.length = 0;
+
+        this.witched = false; // For witch action
     }
 
     resetDay() {
@@ -1048,6 +1059,7 @@ class Witch extends Player {
         this.target[0].sendMessage("You feel a mystical power dominating you... You were witched!");
         if (!this.target[0].witchImmune) {
             this.target[0].target = this.target[1];
+            this.target[0].witched = true;
         }
     }
 }
