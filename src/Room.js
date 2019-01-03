@@ -16,7 +16,9 @@ const Role = {
     VILLAGER: "VILLAGER",
     WEREWOLF: "WEREWOLF",
     HEALER: "HEALER",
-    SEER: "SEER" 
+    SEER: "SEER",
+    WITCH: "WITCH",
+    JESTER: "JESTER"
 };
 
 const Alignment = {
@@ -29,7 +31,8 @@ const Alignment = {
 const Faction = {
     VILLAGE: "VILLAGE",
     WEREWOLVES: "WEREWOLVES",
-    NEUTRAL: "NEUTRAL"
+    NEUTRAL: "NEUTRAL",
+    WITCH: "WITCH"
 }
 
 const Power = {
@@ -48,12 +51,14 @@ const dict = function(){
 };
 
 const NightPlayOrder = [
+    Role.WITCH,
     Role.WEREWOLF,
     Role.HEALER,
     Role.SEER
 ];
 
 const NightCalculationOrder = [
+    Role.WITCH,
     Role.WEREWOLF,
     Role.HEALER,
     Role.SEER
@@ -71,8 +76,18 @@ const NightDetails = dict(
         timer: 10000
     }],
     [Role.SEER, {
-        summon_message: "Fortune teller, you are summoned. Pick a player to check",
+        summon_message: "Fortune teller, open your eyes. Pick a player to check.",
         end_message: "Good night, fortune teller.",
+        timer: 10000
+    }],
+    [Role.WITCH, {
+        summon_message: "Witch, open your eyes. Pick a player to cast your spells on.",
+        end_message: "Good night, witch.",
+        timer: 15000
+    }],
+    [Role.JESTER, {
+        summon_message: "Jester, open your eyes. Pick a player to haunt.",
+        end_message: "Good night, jester.",
         timer: 10000
     }]
 );
@@ -97,14 +112,18 @@ function max(arr, evaluator) {
 }
 
 export class GameRoom {
-    constructor() {
+    constructor(isTest = false) {
+        if (isTest) {
+            this.DEBUG = true;
+        }
+
         this.clients = [];
         this.players = [];
         this.NightPlayOrder = [];
         
-        this.roles = [Role.WEREWOLF, Role.HEALER, [Role.VILLAGER, Role.HEALER], Role.VILLAGER];
+        this.roles = [Role.WEREWOLF, Role.WITCH];
         
-        this.roomId = Math.round(Math.random() * 900000 + 100000).toString();
+        this.roomId = "11111";Math.round(Math.random() * 900000 + 100000).toString();
     }
 
     onInit() {
@@ -290,8 +309,8 @@ export class GameRoom {
     }
 
     endNight() {
-        this.calculateWerewolfKill();
         this.calculateNightActions();
+        this.calculateWerewolfKill();
         this.callouts = this.calculateNightDeaths() || ["No one was killed tonight"];
         
         this.setDayTransition();
@@ -498,7 +517,8 @@ export class GameRoom {
     }
 
     speak(message) {
-        this.clients[0].emit("speak", message);
+        if (!this.DEBUG)
+            this.clients[0].emit("speak", message);
     }
 
     // Initializes the room as if the lobby phase started right now
@@ -677,6 +697,7 @@ export class GameRoom {
         var village = alive.filter(x => x.faction == Faction.VILLAGE);
         var werewolves = alive.filter(x => x.faction == Faction.WEREWOLVES);
         var neutral = alive.filter(x => x.faction == Faction.NEUTRAL);
+        var witches = alive.filter(x => x.faction == Faction.WITCH);
 
         if (alive.length == 0) {
             return "DRAW";
@@ -688,6 +709,10 @@ export class GameRoom {
 
         if (werewolves.length + neutral.length == alive.length) {
             return Faction.WEREWOLVES
+        }
+
+        if (witches.length + neutral.length == alive.length) {
+            return Faction.WITCH;
         }
 
         if (neutral.length == alive.length) {
@@ -903,6 +928,8 @@ class Villager extends Player {
         this.alignment = Alignment.GOOD;
         this.seer_result = Alignment.GOOD;
         this.faction = Faction.VILLAGE;
+
+        this.witchImmune = true;
     }
 
     isActive() {
@@ -916,6 +943,8 @@ class Werewolf extends Player {
         this.alignment = Alignment.EVIL;
         this.seer_result = Alignment.EVIL;
         this.faction = Faction.WEREWOLVES;
+
+        this.witchImmune = false;
     }
 
     isActive(game) {
@@ -943,6 +972,8 @@ class Healer extends Player {
         this.alignment = Alignment.GOOD;
         this.seer_result = Alignment.GOOD;
         this.faction = Faction.VILLAGE;
+
+        this.witchImmune = false;
     }
 
     performRole() {
@@ -957,6 +988,8 @@ class Seer extends Player {
         this.alignment = Alignment.GOOD;
         this.seer_result = Alignment.GOOD;
         this.faction = Faction.VILLAGE;
+
+        this.witchImmune = false;
     }
 
     setTarget(input, game) {
@@ -970,11 +1003,61 @@ class Seer extends Player {
     }
 }
 
+class Witch extends Player {
+    init() {
+        this.role = Role.WITCH;
+        this.alignment = Alignment.CHAOS;
+        this.seer_result = Alignment.EVIL;
+        this.faction = Faction.WITCH;
+
+        this.witchImmune = true;
+
+        this.setTarget = this.setTarget.bind(this);
+    }
+
+    resetNight() {
+        super.resetNight();
+
+        this.target = [];
+    }
+
+    isActive(game) {
+        console.log("Checking if a witch is active");
+        console.log("Current order", game.NightPlayOrder[game.nightIndex], "my order", this.role);
+        console.log("am i dead", this.dead);
+        console.log("Did i already play", this.target);
+        return game.NightPlayOrder[game.nightIndex] == this.role && !this.dead && (this.target == false || this.target.length < 2);
+    }
+
+    setTarget(input, game) {
+        if (input === false) {
+            this.target = false;
+            return;
+        }
+        var p = game.getPlayer(input);
+        if (p != null && !p.dead) {
+            this.target.push(p);
+        }
+    }
+
+    canPerformRole(game) {
+        return !this.dead && this.target && this.target.length == 2;
+    }
+
+    performRole() {
+        this.target[0].sendMessage("You feel a mystical power dominating you... You were witched!");
+        if (!this.target[0].witchImmune) {
+            this.target[0].target = this.target[1];
+        }
+    }
+}
+
 const RoleGenerators = dict(
     [Role.VILLAGER, Villager],
     [Role.WEREWOLF, Werewolf],
     [Role.HEALER, Healer],
-    [Role.SEER, Seer]
+    [Role.SEER, Seer],
+    [Role.WITCH, Witch]
 )
 
 const createPlayer = (id, name, image, color, role) => {
