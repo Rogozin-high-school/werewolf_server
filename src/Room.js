@@ -51,6 +51,7 @@ const dict = function(){
 };
 
 const NightPlayOrder = [
+    Role.JESTER,
     Role.WITCH,
     Role.WEREWOLF,
     Role.HEALER,
@@ -59,6 +60,7 @@ const NightPlayOrder = [
 
 const NightCalculationOrder = [
     Role.WITCH,
+    Role.JESTER,
     Role.WEREWOLF,
     Role.HEALER,
     Role.SEER
@@ -71,7 +73,7 @@ const NightDetails = dict(
         timer: 30000
     }],
     [Role.HEALER, {
-        summon_message: "Healer, wake up. Pick a player to heal.",
+        summon_message: "Healer, open your eyes. Pick a player to heal.",
         end_message: "Good night, healer.",
         timer: 10000
     }],
@@ -88,7 +90,10 @@ const NightDetails = dict(
     [Role.JESTER, {
         summon_message: "Jester, open your eyes. Pick a player to haunt.",
         end_message: "Good night, jester.",
-        timer: 10000
+        timer: 10000,
+        should_play: function(game) {
+            return game.players.filter(x => x.role == Role.JESTER && x.haunting).length;
+        }
     }]
 );
 
@@ -121,9 +126,9 @@ export class GameRoom {
         this.players = [];
         this.NightPlayOrder = [];
         
-        this.roles = [Role.WEREWOLF, Role.WITCH, Role.WEREWOLF];
+        this.roles = [Role.WEREWOLF, Role.JESTER, Role.VILLAGER];
         
-        this.roomId = "11111";Math.round(Math.random() * 900000 + 100000).toString();
+        this.roomId = Math.round(Math.random() * 900000 + 100000).toString();
     }
 
     onInit() {
@@ -248,18 +253,22 @@ export class GameRoom {
             this.speak(NightDetails[this.NightPlayOrder[this.nightIndex]].end_message);
             
             setTimeout(() => {
-                console.log("No active players left, incrementing nightIndex");
-                this.endNightAction();
-                console.log("Current nightIndex:", this.nightIndex);
-                
-                if (this.nightIndex < this.NightPlayOrder.length) {
-                    console.log("Continuing to play. Current night order", this.NightPlayOrder[this.nightIndex]);
-                    this.startNightAction();
-                }
-                else {
-                    this.endNight();
-                }
+                this.tryIncrementNightAction();
             }, 2000);            
+        }
+    }
+
+    tryIncrementNightAction() {
+        console.log("No active players left, incrementing nightIndex");
+        this.endNightAction();
+        console.log("Current nightIndex:", this.nightIndex);
+        
+        if (this.nightIndex < this.NightPlayOrder.length) {
+            console.log("Continuing to play. Current night order", this.NightPlayOrder[this.nightIndex]);
+            this.startNightAction();
+        }
+        else {
+            this.endNight();
         }
     }
 
@@ -290,8 +299,7 @@ export class GameRoom {
 
     onLoop_EXECUTION() {
         if (this.timerDue()) {
-            this.player_on_stand.dead = true;
-            this.player_on_stand.dead_sync = true;
+            this.player_on_stand.execute()
             this.player_on_stand = null;
 
 
@@ -561,6 +569,13 @@ export class GameRoom {
     }
 
     startNightAction() {
+
+        var filter = NightDetails[this.NightPlayOrder[this.nightIndex]].should_play;
+        if (filter && !filter(this)) {
+            this.tryIncrementNightAction(); // recursive but it's ok by me
+            return;
+        }
+
         var active = this.getActivePlayers();
         this.nightActionDone = false;
         this.nightActionStarted = true;
@@ -908,6 +923,11 @@ class Player {
         this.dead = true;
     }
 
+    execute() {
+        this.dead = true;
+        this.dead_sync = true;
+    }
+
     sendMessage(text) {
         this.messages.push(text);
     }
@@ -977,6 +997,44 @@ class Werewolf extends Player {
     }
 }
 
+class Jester extends Player {
+    init() {
+        this.role = Role.JESTER;
+        this.alignment = Alignment.NEUTRAL;
+        this.seer_result = Alignment.EVIL;
+        this.faction = Faction.NEUTRAL;
+
+        this.jester_win = false;
+        this.haunting = false;
+    }
+
+    isActive(game) {
+        console.log("Checking if jester is active");
+        console.log(this.haunting);
+        return game.NightPlayOrder[game.nightIndex] == this.role && this.target === null && this.haunting;
+    }
+
+    canPerformRole() {
+        return this.haunting;
+    }
+
+    performRole() {
+        console.log("Jester attacking");
+
+        this.haunting = false;
+        if (!this.target) return;
+
+        this.target.attackers.push([this, Power.UNSTOPPABLE, "haunted by the jester"]);
+    }
+
+    execute() {
+        super.execute();
+        console.log("Executed a jester");
+        this.jester_win = true;
+        this.haunting = true;
+    }
+}
+
 class Healer extends Player {
     init() {
         this.role = Role.HEALER;
@@ -988,6 +1046,7 @@ class Healer extends Player {
     }
 
     performRole() {
+        if (!this.canPerformRole()) return;
         console.log(this.name, "healing", this.target.name);
         this.target.healers.push([this, Power.BASIC]);
     }
@@ -1009,7 +1068,10 @@ class Seer extends Player {
         }
         else {
             var c = game.getClient(this.id);
-            if (c) c.emit("seer_result", game.getPlayer(input));
+            var p = game.getPlayer(input);
+            if (c) {
+                c.emit("seer_result", {seer_result: p ? game.getPlayer(input).seer_result : "GOOD"});
+            }
         }
     }
 }
@@ -1037,7 +1099,7 @@ class Witch extends Player {
         console.log("Current order", game.NightPlayOrder[game.nightIndex], "my order", this.role);
         console.log("am i dead", this.dead);
         console.log("Did i already play", this.target);
-        return game.NightPlayOrder[game.nightIndex] == this.role && !this.dead && (this.target == false || this.target.length < 2);
+        return game.NightPlayOrder[game.nightIndex] == this.role && !this.dead && this.target !== false && this.target.length < 2;
     }
 
     setTarget(input, game) {
@@ -1069,7 +1131,8 @@ const RoleGenerators = dict(
     [Role.WEREWOLF, Werewolf],
     [Role.HEALER, Healer],
     [Role.SEER, Seer],
-    [Role.WITCH, Witch]
+    [Role.WITCH, Witch],
+    [Role.JESTER, Jester]
 )
 
 const createPlayer = (id, name, image, color, role) => {

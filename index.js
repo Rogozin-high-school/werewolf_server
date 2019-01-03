@@ -40,6 +40,10 @@ io.on("connection", function(socket) {
         socket.image = data.avatar || randomAvatar();
     });
 
+    socket.on("debug", function(data) {
+        console.log("Socket debug >>>", data);
+    })
+
     socket.on("join", function(data) {
         var room = manager.getRoom(data);
         if (!room) {
