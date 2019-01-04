@@ -140,6 +140,7 @@ export class GameRoom {
         console.log(client.id, "joined", this.roomId);
         this.syncClientList();
         this.syncGamestate();
+        this.syncRolesList();
     }
 
     onLeave(client) {
@@ -514,8 +515,17 @@ export class GameRoom {
         }
     }
 
+    syncRolesList() {
+        var gameState = {
+            roles: this.roles
+        };
+
+        for (var client of this.clients) {
+            client.emit("state", gameState);
+        }
+    }
+
     syncGamestate() {
-        console.log("Synchronizing game state");
         var gameState = {
             phase: this.state,
             players: this.players.map(x => x.objectify()),
@@ -524,13 +534,10 @@ export class GameRoom {
             player_on_stand: this.player_on_stand ? this.player_on_stand.objectify() : null,
             winning_faction: this.winning_faction
         };
-        console.log("Made gameState object");
 
         for (var client of this.clients) {
-            console.log("Sending gameState to", client.id);
             client.emit("state", gameState);
         }
-        console.log("Finished synchronizing gameState");
     }
 
     speak(message) {
@@ -594,6 +601,25 @@ export class GameRoom {
         console.log(this.nightIndex);
         this.nightIndex++;
         console.log(this.nightIndex);
+    }
+
+    __msg__add_role(client, data) {
+        if (Role[data]) {
+            this.roles.push(data);
+            this.syncRolesList();
+        }
+    }
+
+    __msg__remove_role(client, data) {
+        if (data < this.roles.length) {
+            this.roles.splice(data, 1);
+            this.syncRolesList();
+        }
+    }
+
+    __msg__set_preset(client, data) {
+        this.roles = data;
+        this.syncRolesList();
     }
 
     __msg__start_game(client, data) {
@@ -727,6 +753,10 @@ export class GameRoom {
             return "DRAW";
         }
 
+        if (neutral.length == alive.length) {
+            return Faction.NEUTRAL;
+        }
+
         if (village.length + neutral.length == alive.length) {
             return Faction.VILLAGE;
         }
@@ -737,10 +767,6 @@ export class GameRoom {
 
         if (witches.length + neutral.length == alive.length) {
             return Faction.WITCH;
-        }
-
-        if (neutral.length == alive.length) {
-            return Faction.NEUTRAL;
         }
 
         return null;
