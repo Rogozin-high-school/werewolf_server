@@ -33,6 +33,29 @@ io.on("connection", function(socket) {
         }
     });
 
+    socket.on("refresh_token", function(token) {
+        var roomId = token.split("/")[0];
+        var socketId = token.split("/")[1];
+
+        var room = manager.getRoom(roomId);
+        if (!room) {
+            socket.emit("refresh_fail");
+            console.log("Refresh token restoration failed: room does not exist");
+            return;
+        }
+
+        var player = room.getPlayer(socketId);
+        if (!player) {
+            socket.emit("refresh_fail");
+            console.log("Refresh token restoration failed: player was not found");
+            return;
+        }
+
+        player.id = socket.id;
+        manager.joinRoom(roomId, socket);
+        socket.emit("room", roomId);
+    });
+
     socket.on("details", function(data) {
         console.log("Received nickname ", socket.id, data);
         socket.nickname = data.nickname || "foo";

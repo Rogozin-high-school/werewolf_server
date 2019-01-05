@@ -68,27 +68,27 @@ const NightCalculationOrder = [
 
 const NightDetails = dict(
     [Role.WEREWOLF, {
-        summon_message: "Werewolves, open your eyes. Pick a player to kill.",
+        summon_message: "Werewolves, wake up. Pick a player to kill.",
         end_message: "Good night, werewolves.",
-        timer: 30000
+        timer: 3000000
     }],
     [Role.HEALER, {
-        summon_message: "Healer, open your eyes. Pick a player to heal.",
+        summon_message: "Healer, wake up. Pick a player to heal.",
         end_message: "Good night, healer.",
         timer: 10000
     }],
     [Role.SEER, {
-        summon_message: "Fortune teller, open your eyes. Pick a player to check.",
+        summon_message: "Fortune teller, wake up. Pick a player to check.",
         end_message: "Good night, fortune teller.",
         timer: 10000
     }],
     [Role.WITCH, {
-        summon_message: "Witch, open your eyes. Pick a player to cast your spells on.",
+        summon_message: "Witch, wake up. Pick a player to cast your spells on.",
         end_message: "Good night, witch.",
         timer: 15000
     }],
     [Role.JESTER, {
-        summon_message: "Jester, open your eyes. Pick a player to haunt.",
+        summon_message: "Jester, wake up. Pick a player to haunt.",
         end_message: "Good night, jester.",
         timer: 10000,
         should_play: function(game) {
@@ -117,7 +117,7 @@ function max(arr, evaluator) {
 }
 
 export class GameRoom {
-    constructor(isTest = false) {
+    constructor(id, isTest = false) {
         if (isTest) {
             this.DEBUG = true;
         }
@@ -128,7 +128,7 @@ export class GameRoom {
         
         this.roles = [Role.WEREWOLF, Role.JESTER, Role.VILLAGER];
         
-        this.roomId = Math.round(Math.random() * 900000 + 100000).toString();
+        this.roomId = id;
     }
 
     onInit() {
@@ -138,6 +138,7 @@ export class GameRoom {
 
     onJoin(client) {
         console.log(client.id, "joined", this.roomId);
+        this.speak(client.nickname + " has joined the town");
         this.syncClientList();
         this.syncGamestate();
         this.syncRolesList();
@@ -145,6 +146,7 @@ export class GameRoom {
 
     onLeave(client) {
         console.log(client.id, "left", this.roomId);
+        this.speak(client.nickname + " has left the town");
         this.syncClientList();
         this.syncGamestate();
     }
@@ -180,7 +182,7 @@ export class GameRoom {
     onLoop() {
         switch (this.state) {
             case State.LOBBY:
-                this.onLoop_LOBBY();
+                // this.onLoop_LOBBY();
                 break;
             case State.ROLE_SELECTION:
                 this.onLoop_ROLESELECTION();
@@ -423,6 +425,7 @@ export class GameRoom {
 
     startNightTransition() {
         this.setState(State.NIGHT_TRANSITION, 4000);
+        this.night++;
         // this.speak("Woof woof, I am a scary werewolf. The night begins now");
     }
 
@@ -447,6 +450,19 @@ export class GameRoom {
     }
 
     calculateWerewolfKill() {
+
+        var witched = false;
+
+        for (var ww of this.players.filter(x => x.role == Role.WEREWOLF && x.target && x.witched)) {
+            if (ww.target != target) {
+                ww.werewolfKill(ww.target);
+                witched = true;
+            }
+        }
+
+        if (witched) return; // If a werewolf got witched, they will attack INSTEAD the witch target
+                             // instead of the voting target
+
         var wwVotes = this.players.filter(x => x.role == Role.WEREWOLF && x.target && !x.witched).map(x => x.target);
         var votes = [...new Set(wwVotes)].map(y => [y, wwVotes.filter(n => n == y).length]); // Counting the votes
         var targets = [];
@@ -466,14 +482,7 @@ export class GameRoom {
             target = randomOf(targets)[0];
             var attacker = randomOf(this.players.filter(x => x.role == Role.WEREWOLF && x.target == target));
             attacker.werewolfKill(target);
-        }
-
-        // TODO: Test this piece of code? 
-        for (var ww of this.players.filter(x => x.role == Role.WEREWOLF && x.target && x.witched)) {
-            if (ww.target != target) {
-                ww.werewolfKill(ww.target);
-            }
-        }
+        }        
     }
 
     calculateNightActions() {
@@ -496,6 +505,15 @@ export class GameRoom {
                 day_callouts.push(...data);
             }
         }
+
+        var killsTonight = this.players.filter(x => x.dead && !x.dead_sync);
+        if (killsTonight) {
+            this.nights_no_kill = 0;
+        }
+        else {
+            this.nights_no_kill++;
+        }
+
         return day_callouts;
     }
 
@@ -528,11 +546,11 @@ export class GameRoom {
     syncGamestate() {
         var gameState = {
             phase: this.state,
-            players: this.players.map(x => x.objectify()),
+            players: this.players.map(x => x.objectify(this)),
             timer: this.timer_shown ? this.timer : null,
             message: this.message || null,
-            player_on_stand: this.player_on_stand ? this.player_on_stand.objectify() : null,
-            winning_faction: this.winning_faction
+            player_on_stand: this.player_on_stand ? this.player_on_stand.objectify(this) : null,
+            winning_faction: this.winning_faction && this.winning_faction.constructor.name == "String" ? this.winning_faction : "DRAW"
         };
 
         for (var client of this.clients) {
@@ -541,7 +559,7 @@ export class GameRoom {
     }
 
     speak(message) {
-        if (!this.DEBUG)
+        if (!this.DEBUG && this.clients.length > 0)
             this.clients[0].emit("speak", message);
     }
 
@@ -560,6 +578,10 @@ export class GameRoom {
         this.player_on_stand = null;
 
         this.winning_faction = null;
+
+        this.nights_no_kill = 0;
+
+        this.players.length = 0;
     }
 
     // Sets the game up for a new 
@@ -627,8 +649,9 @@ export class GameRoom {
         console.log(client.id, client.nickname, this.clients[0].id, this.clients[0].nickname);
         if (this.state != State.LOBBY) return; // Can only start game while in lobby
         if (client.id != this.clients[0].id) return; // Only the host can start the game
+        if (this.roles.length < this.clients.length) return; // Not enough role cards to start?
 
-        this.hostReady = true;
+        this.startRoleSelection();
     }
 
     __msg__kick(client, data) {
@@ -696,6 +719,13 @@ export class GameRoom {
         this.trialGuilty();
     }
 
+    __msg__skip_day(client) {
+        if (this.state != State.DISCUSSION) return;  // Can only take this action in the DISCUSSION state
+        if (client.id != this.clients[0].id) return; // Only host can skip day
+
+        this.startNightTransition();
+    }
+
     setTrial(player) {
         console.log(player.name, "is now on trial");
         
@@ -749,6 +779,8 @@ export class GameRoom {
         var neutral = alive.filter(x => x.faction == Faction.NEUTRAL);
         var witches = alive.filter(x => x.faction == Faction.WITCH);
 
+        var healers = alive.filter(x => x.role == Role.HEALER);
+
         if (alive.length == 0) {
             return "DRAW";
         }
@@ -760,6 +792,26 @@ export class GameRoom {
         if (village.length + neutral.length == alive.length) {
             return Faction.VILLAGE;
         }
+        
+        // Witch vs town delayed victory
+        // If witch is against the town (with no WWs), if the town does not have
+        // killing roles such as priests or veterans, witch should immediately lose
+        if (village.length + witches.length == alive.length) {
+            return Faction.VILLAGE;
+        }
+
+        // witch vs ww delayed victory
+        // In case of 1 witch + 1 ww, no-one can lynch the other.
+        // In the following night, the witch witches the ww to kill themselves and wins.
+        if (witches.length == 1 && werewolves.length == 1) {
+            return Faction.WITCH;
+        }
+
+        // WW vs healer stalemate
+        // If 1 ww + 1 healer are alive, draw should be immediately called
+        if (healers.length == 1 && werewolves.length == 1) {
+            return [Faction.VILLAGE, Faction.WEREWOLVES];
+        }
 
         if (werewolves.length + neutral.length == alive.length) {
             return Faction.WEREWOLVES
@@ -767,6 +819,12 @@ export class GameRoom {
 
         if (witches.length + neutral.length == alive.length) {
             return Faction.WITCH;
+        }
+
+        // Uncalculated stalemate prevention
+        // If there are three nights with no kills, game will stale and a draw will be announced
+        if (this.night >= 3 && this.nights_no_kill >= 3) {
+            return "DRAW";
         }
 
         return null;
@@ -801,6 +859,18 @@ export class RoomManager {
         }
     }
 
+    generateId() {
+        return Math.round(Math.random() * 9000 + 1000).toString();
+    }
+
+    generateValidatedId() {
+        var id = this.generateId();
+        while (this.rooms.filter(x => x.id == id).length > 0) {
+            id = this.generateId();
+        }
+        return id;
+    }
+
     dump() {
         console.log(this.rooms);
     }
@@ -819,7 +889,7 @@ export class RoomManager {
     }
 
     createRoom() {
-        var r = new GameRoom();
+        var r = new GameRoom(this.generateValidatedId());
         this.rooms.push(r);
 
         r.onInit();
@@ -879,6 +949,8 @@ class Player {
 
         this.messages = [];
         this.vote = null;
+
+        this.won = false;
     }
 
     init() { }
@@ -941,6 +1013,7 @@ class Player {
             }
             else {
                 this.sendMessage("Someone attacked you but you were saved!")
+                callouts.push(this.name + " was apparently attacked tonight, but they survived");
             }
         }
     }
@@ -959,10 +1032,11 @@ class Player {
     }
 
     isVictorious(winning_faction) {
-        return (winning_faction == this.faction);
+        return (winning_faction == this.faction || ~winning_faction.indexOf(this.faction));
     }
 
-    objectify() {
+    objectify(game) {
+        console.log("Objectifying player , target", this.target && this.target.id);
         return {
             name: this.name,
             id: this.id,
@@ -973,7 +1047,8 @@ class Player {
             role: this.role,
             messages: this.messages,
             vote: this.vote ? this.vote.id : null,
-            won: this.won || false
+            won: this.won || false,
+            target: this.target ? this.target.id : null
         }
     }
 }
@@ -1009,7 +1084,7 @@ class Werewolf extends Player {
         if (game.NightPlayOrder[game.nightIndex] != this.role) return false;
         if (this.dead) return false;
 
-        var wolves = game.players.filter(x => x.role == this.role && x.target != this.target);
+        var wolves = game.players.filter(x => x.role == this.role && x.target != this.target && !x.dead);
         if (wolves.length == 0 && this.target != null) return false;
 
         return true;
