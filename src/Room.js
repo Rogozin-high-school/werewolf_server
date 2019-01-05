@@ -21,8 +21,8 @@ const Role = {
 
     // Town informative
     SEER: "SEER",
-    SPY: "SPY", // TODO
-    INVESTIGATOR: "INVESTIGATOR", // TODO
+    SPY: "SPY",
+    INVESTIGATOR: "INVESTIGATOR",
 
     // Town killing
     VETERAN: "VETERAN",
@@ -30,7 +30,7 @@ const Role = {
 
     // Werewolves
     WEREWOLF: "WEREWOLF",
-    WOLF_SEER: "WOLF_SEER", // TODO
+    WOLF_SEER: "WOLF_SEER",
 
     // Witches
     WITCH: "WITCH",
@@ -79,6 +79,7 @@ const NightPlayOrder = [
     Role.HEALER,
     Role.SEER,
     Role.PRIEST,
+    Role.INVESTIGATOR,
     Role.SPY
 ];
 
@@ -90,6 +91,8 @@ const NightCalculationOrder = [
     Role.PRIEST,
     Role.HEALER,
     Role.SEER,
+    Role.WOLF_SEER,
+    Role.INVESTIGATOR,
     Role.SPY
 ];
 
@@ -136,8 +139,28 @@ const NightDetails = dict(
         summon_message: "Spy, wake up. Pick a player to follow.",
         end_message: "Good night, spy.",
         timer: 10000
+    }],
+    [Role.INVESTIGATOR, {
+        summon_message: "Investigator, wake up. Pick a player to investigate.",
+        end_message: "Good night, investigator.",
+        timer: 10000
     }]
 );
+
+const WolfSeerResults = dict(
+    [Role.VILLAGER, "Your target is innocent and useless. They must be a villager!"],
+    [Role.HEALER, "Your target heals people. They must be a healer!"],
+    [Role.SEER, "Your target watches people's aura. They must ba a fortune teller!"],
+    [Role.SPY, "Your target follows people at night. They must be a spy!"],
+    [Role.INVESTIGATOR, "Your target has so much paperwork. They must be an investigator!"],
+    [Role.VETERAN, "You found a gun at your target's house. They are a veteran!"],
+    [Role.PRIEST, "Your target is worshiping God. They must be a priest!"],
+    [Role.WEREWOLF, "You could literally know that without wasting your ability... Werewolf..."],
+    [Role.WOLF_SEER, "It's like looking at a mirror. Your target is a wolf seer!"],
+    [Role.WITCH, "Your target casts mystical spells. They must be a witch!"],
+    [Role.ARSONIST, "Your target has fuel cans, they must be an arsonist!"],
+    [Role.JESTER, "Your target just wants to be hung. They must be a jester!"]
+)
 
 function shuffle(a) {
     var j, x, i;
@@ -168,7 +191,7 @@ export class GameRoom {
         this.players = [];
         this.NightPlayOrder = [];
         
-        this.roles = [Role.VILLAGER, Role.WEREWOLF, Role.SPY];
+        this.roles = [Role.WOLF_SEER, Role.VILLAGER];
         
         this.roomId = id;
     }
@@ -364,8 +387,12 @@ export class GameRoom {
     endNight() {
         this.calculateNightActions();
         this.calculateWerewolfKill();
+
         this.callouts = this.calculateNightDeaths() || ["No one was killed tonight"];
         
+        this.calculatePromotions();
+        this.calculateConversions();
+
         this.setDayTransition();
     }
 
@@ -384,6 +411,7 @@ export class GameRoom {
     }
 
     broadcaseNightMessages() {
+        console.log("Broadcasting night messages. Player list: ", this.players);
         for (var player of this.players.filter(x => !x.dead_sync)) {
             var c = this.getClient(player.id);
             if (c) c.emit("open_messages", player.messages);
@@ -462,6 +490,9 @@ export class GameRoom {
                 this.NightPlayOrder.push(play);
             }
         }
+        if (this.NightPlayOrder.length == 0) {
+            this.NightPlayOrder.push(Role.WEREWOLF);
+        }
     }
 
     startNightTransition() {
@@ -487,6 +518,32 @@ export class GameRoom {
             }
         }
         return ps;
+    }
+
+    calculatePromotions() {
+        var player_list_changed = false;
+
+        // Promoting a werewolf team member to being a werewolf
+        if (this.players.filter(x => !x.dead && x.role == Role.WEREWOLF).length == 0) {
+            var nonwws = this.players.filter(x => !x.dead && x.faction == Faction.WEREWOLVES);
+            if (nonwws.length > 0) {
+                shuffle(nonwws);
+                nonwws[0].setRole(Role.WEREWOLF);
+                nonwws[0].sendMessage("All werewolves have died so you have become a werewolf!");
+
+                player_list_changed = true;
+            }
+        }
+
+        return player_list_changed;
+    }
+
+    calculateConversions() {
+        for (var pi in this.players) {
+            if (this.players[pi].convert) {
+                this.players[pi] = convertPlayer(this.players[pi], this.players[pi].convert);
+            }
+        }
     }
 
     calculateWerewolfKill() {
@@ -637,7 +694,7 @@ export class GameRoom {
     }
 
     startNightAction() {
-
+        console.log("Starting night action", this.NightPlayOrder, this.NightPlayOrder[this.nightIndex]);
         var filter = NightDetails[this.NightPlayOrder[this.nightIndex]].should_play;
         if (filter && !filter(this)) {
             this.tryIncrementNightAction(); // recursive but it's ok by me
@@ -984,6 +1041,8 @@ class Player {
         this.vote = null;
 
         this.won = false;
+        
+        this.convert = null;
     }
 
     init() { }
@@ -998,10 +1057,16 @@ class Player {
         this.messages.length = 0;
 
         this.witched = false; // For witch action
+
+        this.convert = null; // For changing player's roles.
     }
 
     resetDay() {
         this.vote = null;
+    }
+
+    setRole(role) {
+        this.convert = role;
     }
 
     isActive(game) {
@@ -1120,7 +1185,7 @@ class Werewolf extends Player {
 
     isActive(game) {
 
-        if (game.NightPlayOrder[game.nightIndex] != this.role) return false;
+        if (game.NightPlayOrder[game.nightIndex] != "WEREWOLF") return false;
         if (this.dead) return false;
 
         var wolves = game.players.filter(x => x.role == this.role && x.target != this.target && !x.dead);
@@ -1135,6 +1200,32 @@ class Werewolf extends Player {
             if (!target.getVisited(this)) return;
             target.attackers.push([this, Power.BASIC, "attacked by a werewolf"]);
         }
+    }
+}
+
+class WolfSeer extends Player {
+    init() {
+        this.role = Role.WOLF_SEER;
+        this.faction = Faction.WEREWOLVES;
+        this.alignment = Alignment.EVIL;
+        this.seer_result = Alignment.EVIL;
+
+        this.witchImmune = false;
+    }
+
+    isActive(game) {
+        if (game.NightPlayOrder[game.nightIndex] != "WEREWOLF") return false;
+        if (this.dead) return false;
+        if (this.target != null) return false;
+
+        return true;
+    }
+
+    performRole() {
+        if (!this.canPerformRole()) return;
+        if (!this.target.getVisited(this)) return;
+
+        this.sendMessage(WolfSeerResults[this.target.role] || "Your target's role could not be determined");
     }
 }
 
@@ -1319,6 +1410,48 @@ class Spy extends Player {
     }
 }
 
+class Investigator extends Player {
+    init() {
+        this.role = Role.INVESTIGATOR;
+        this.alignment = Alignment.GOOD;
+        this.seer_result = Alignment.GOOD;
+        this.faction = Faction.VILLAGE;
+
+        this.witchImmune = false;
+    }
+
+    performRole() {
+        if (!this.canPerformRole()) return;
+        if (!this.target.getVisited(this)) return;
+
+        switch (this.target.role) {
+            case Role.VILLAGER:
+            case Role.ARSONIST:
+            case Role.VETERAN:
+                this.sendMessage("Your target could be a Villager, Arsonist or Veteran");
+                break;
+            case Role.INVESTIGATOR:
+            case Role.WEREWOLF:
+            case Role.PRIEST:
+                this.sendMessage("Your target could be an Investigator, Werewolf or Priest");
+                break;
+            case Role.SEER:
+            case Role.SPY:
+            case Role.WITCH:
+                this.sendMessage("Your target could be a Fortune Teller, Spy or Witch");
+                break;
+            case Role.JESTER:
+            case Role.WOLF_SEER:
+            case Role.HEALER:
+                this.sendMessage("Your target could be a Jester, Wolf Seer or Healer");
+                break;
+            default:
+                this.sendMessage("Your target's role could not be determined");
+                break;
+        }
+    }
+}
+
 class Witch extends Player {
     init() {
         this.role = Role.WITCH;
@@ -1383,13 +1516,28 @@ const RoleGenerators = dict(
     [Role.JESTER, Jester],
     [Role.PRIEST, Priest],
     [Role.VETERAN, Veteran],
-    [Role.SPY, Spy]
+    [Role.SPY, Spy],
+    [Role.INVESTIGATOR, Investigator],
+    [Role.WOLF_SEER, WolfSeer]
 )
 
 const createPlayer = (id, name, image, color, role) => {
     var player = new (RoleGenerators[role])(id, name, image, color);
     player.init();
     return player;
+};
+
+const copyPlayer = (src, dst) => {
+    dst.messages = src.messages;
+};
+
+const convertPlayer = (player, role) => {
+    console.log("Converting", player.name, "to", role);
+    var n = createPlayer(player.id, player.name, player.image, player.color, role);
+    console.log("New player object", n);
+    copyPlayer(player, n);
+    console.log("Modified player object", n);
+    return n;
 };
 
 export { createPlayer, Role };
