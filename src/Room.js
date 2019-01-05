@@ -13,12 +13,33 @@ const State = {
 };
 
 const Role = {
+    // Town idle
     VILLAGER: "VILLAGER",
-    WEREWOLF: "WEREWOLF",
+
+    // Town protective
     HEALER: "HEALER",
+
+    // Town informative
     SEER: "SEER",
+    SPY: "SPY", // TODO
+    INVESTIGATOR: "INVESTIGATOR", // TODO
+
+    // Town killing
+    VETERAN: "VETERAN",
+    PRIEST: "PRIEST",
+
+    // Werewolves
+    WEREWOLF: "WEREWOLF",
+    WOLF_SEER: "WOLF_SEER", // TODO
+
+    // Witches
     WITCH: "WITCH",
-    JESTER: "JESTER"
+
+    // Arsonist
+    ARSONIST: "ARSONIST", // TODO
+
+    // Neutral roles
+    JESTER: "JESTER",
 };
 
 const Alignment = {
@@ -53,22 +74,28 @@ const dict = function(){
 const NightPlayOrder = [
     Role.JESTER,
     Role.WITCH,
+    Role.VETERAN,
     Role.WEREWOLF,
     Role.HEALER,
-    Role.SEER
+    Role.SEER,
+    Role.PRIEST,
+    Role.SPY
 ];
 
 const NightCalculationOrder = [
     Role.WITCH,
     Role.JESTER,
+    Role.VETERAN,
     Role.WEREWOLF,
+    Role.PRIEST,
     Role.HEALER,
-    Role.SEER
+    Role.SEER,
+    Role.SPY
 ];
 
 const NightDetails = dict(
     [Role.WEREWOLF, {
-        summon_message: "Werewolves, wake up. Pick a player to kill.",
+        summon_message: "Werewolves, wake up. Pick a player to attack.",
         end_message: "Good night, werewolves.",
         timer: 3000000
     }],
@@ -94,6 +121,21 @@ const NightDetails = dict(
         should_play: function(game) {
             return game.players.filter(x => x.role == Role.JESTER && x.haunting).length;
         }
+    }],
+    [Role.VETERAN, {
+        summon_message: "Veteran, wake up. Would you like to stay on alert?.",
+        end_message: "Good night, veteran.",
+        timer: 10000
+    }],
+    [Role.PRIEST, {
+        summon_message: "Priest, wake up. Pick a player to kill.",
+        end_message: "Good night, priest.",
+        timer: 10000
+    }],
+    [Role.SPY, {
+        summon_message: "Spy, wake up. Pick a player to follow.",
+        end_message: "Good night, spy.",
+        timer: 10000
     }]
 );
 
@@ -126,7 +168,7 @@ export class GameRoom {
         this.players = [];
         this.NightPlayOrder = [];
         
-        this.roles = [Role.WEREWOLF, Role.JESTER, Role.VILLAGER];
+        this.roles = [Role.VILLAGER, Role.WEREWOLF, Role.SPY];
         
         this.roomId = id;
     }
@@ -138,7 +180,8 @@ export class GameRoom {
 
     onJoin(client) {
         console.log(client.id, "joined", this.roomId);
-        this.speak(client.nickname + " has joined the town");
+        if (this.state == State.LOBBY) this.speak(client.nickname + " has joined the town");
+        
         this.syncClientList();
         this.syncGamestate();
         this.syncRolesList();
@@ -146,7 +189,8 @@ export class GameRoom {
 
     onLeave(client) {
         console.log(client.id, "left", this.roomId);
-        this.speak(client.nickname + " has left the town");
+        if (this.state == State.LOBBY) this.speak(client.nickname + " has left the town");
+        
         this.syncClientList();
         this.syncGamestate();
     }
@@ -245,7 +289,6 @@ export class GameRoom {
 
     onLoop_NIGHT() {
         var active = this.players.filter(x => x.active); // Getting cached active values
-        console.log("Active players", active.map(x => x.id));
         
         if ((active.length == 0 || this.timerDue()) && this.minTime <= new Date().getTime()
             && !this.nightActionDone && this.nightActionStarted) {
@@ -264,7 +307,6 @@ export class GameRoom {
     tryIncrementNightAction() {
         console.log("No active players left, incrementing nightIndex");
         this.endNightAction();
-        console.log("Current nightIndex:", this.nightIndex);
         
         if (this.nightIndex < this.NightPlayOrder.length) {
             console.log("Continuing to play. Current night order", this.NightPlayOrder[this.nightIndex]);
@@ -382,7 +424,6 @@ export class GameRoom {
         var deck = this.roles.slice(0, this.clients.length);
         for (var i = 0; i < 100; i++) {
             shuffle(deck);
-            console.log(deck);
         }
 
         // Initializing our playerl list (Note, NOT the client list. It's different)
@@ -445,7 +486,6 @@ export class GameRoom {
                 p.active = false;
             }
         }
-        console.log("Got active players");
         return ps;
     }
 
@@ -528,7 +568,6 @@ export class GameRoom {
         });
 
         for (var client of this.clients) {
-            console.log("sending client list");
             client.emit("state", { clients });
         }
     }
@@ -619,10 +658,7 @@ export class GameRoom {
 
     endNightAction() {
         this.nightActionStarted = false;
-        console.log(this);
-        console.log(this.nightIndex);
         this.nightIndex++;
-        console.log(this.nightIndex);
     }
 
     __msg__add_role(client, data) {
@@ -646,7 +682,6 @@ export class GameRoom {
 
     __msg__start_game(client, data) {
         console.log("Received START_GAME");
-        console.log(client.id, client.nickname, this.clients[0].id, this.clients[0].nickname);
         if (this.state != State.LOBBY) return; // Can only start game while in lobby
         if (client.id != this.clients[0].id) return; // Only the host can start the game
         if (this.roles.length < this.clients.length) return; // Not enough role cards to start?
@@ -671,11 +706,8 @@ export class GameRoom {
             p.setTarget(data, this);
         }
 
-        console.log("Getting active players");
         this.getActivePlayers();
-        console.log("Active players returned");
         this.syncGamestate();
-        console.log("Executed night action");
     }
 
     __msg__set_vote(client, data) {
@@ -872,7 +904,7 @@ export class RoomManager {
     }
 
     dump() {
-        console.log(this.rooms);
+        // console.log(this.rooms);
     }
 
     getRoom(roomId) {
@@ -946,6 +978,7 @@ class Player {
 
         this.attackers = [];
         this.healers = [];
+        this.visitors = [];
 
         this.messages = [];
         this.vote = null;
@@ -961,6 +994,7 @@ class Player {
 
         this.attackers.length = 0;
         this.healers.length = 0;
+        this.visitors.length = 0;
         this.messages.length = 0;
 
         this.witched = false; // For witch action
@@ -971,10 +1005,10 @@ class Player {
     }
 
     isActive(game) {
-        console.log("Checking if", this.name, "is active");
-        console.log("Current order", game.NightPlayOrder[game.nightIndex], "my order", this.role);
-        console.log("am i dead", this.dead);
-        console.log("Did i already play", this.target);
+        // console.log("Checking if", this.name, "is active");
+        // console.log("Current order", game.NightPlayOrder[game.nightIndex], "my order", this.role);
+        // console.log("am i dead", this.dead);
+        // console.log("Did i already play", this.target);
         return game.NightPlayOrder[game.nightIndex] == this.role && !this.dead && this.target === null;
     }
 
@@ -1018,6 +1052,11 @@ class Player {
         }
     }
 
+    getVisited(visitor) {
+        this.visitors.push(visitor);
+        return true; // Regular players don't do much when visited. True means that the visit is possible
+    }
+
     kill() {
         this.dead = true;
     }
@@ -1036,7 +1075,7 @@ class Player {
     }
 
     objectify(game) {
-        console.log("Objectifying player , target", this.target && this.target.id);
+        // console.log("Objectifying player , target", this.target && this.target.id);
         return {
             name: this.name,
             id: this.id,
@@ -1093,6 +1132,7 @@ class Werewolf extends Player {
     werewolfKill(target) {
         if (this.canPerformRole()) {
             console.log(this.name, "attacking", target.name);
+            if (!target.getVisited(this)) return;
             target.attackers.push([this, Power.BASIC, "attacked by a werewolf"]);
         }
     }
@@ -1110,8 +1150,6 @@ class Jester extends Player {
     }
 
     isActive(game) {
-        console.log("Checking if jester is active");
-        console.log(this.haunting);
         return game.NightPlayOrder[game.nightIndex] == this.role && this.target === null && this.haunting;
     }
 
@@ -1124,6 +1162,8 @@ class Jester extends Player {
 
         this.haunting = false;
         if (!this.target) return;
+
+        this.target.getVisited(this); // The jester can attack no matter what. We don't take the return value
 
         this.target.attackers.push([this, Power.UNSTOPPABLE, "haunted by the jester"]);
     }
@@ -1148,8 +1188,86 @@ class Healer extends Player {
 
     performRole() {
         if (!this.canPerformRole()) return;
+
+        if (!this.target.getVisited(this)) return;
+
         console.log(this.name, "healing", this.target.name);
         this.target.healers.push([this, Power.BASIC]);
+    }
+}
+
+class Priest extends Player {
+    init() {
+        this.role = Role.PRIEST;
+        this.alignment = Alignment.GOOD;
+        this.seer_result = Alignment.GOOD;
+        this.faction = Faction.VILLAGE;
+
+        this.witchImmune = false;
+    }
+
+    performRole() {
+        if (!this.canPerformRole()) return;
+
+        if (!this.target.getVisited(this)) return;
+
+        this.target.attackers.push([this, Power.BASIC, "attacked by a priest"]);
+        
+        if (this.target.alignment == Alignment.GOOD) {
+            this.attackers.push([null, Power.BASIC, "killed by a divine power"]);
+        }
+    }
+}
+
+class Veteran extends Player {
+    init() {
+        this.role = Role.VETERAN;
+        this.alignment = Alignment.GOOD;
+        this.seer_result = Alignment.EVIL; // Veteran is seen as evil by the seer
+        this.faction = Faction.VILLAGE;
+
+        this.witchImmune = true;
+
+        this.alerts_left = 3;
+    }
+
+    resetNight(game) {
+        super.resetNight(game);
+
+        this.alert = false;
+    }
+
+    setTarget(target) {
+        console.log("Setting veteran target", target);
+        if (target) {
+            if (this.alerts_left) {
+                this.target = true;
+            }
+        }
+        else {
+            this.target = false;
+        }
+    }
+
+    performRole() {
+        console.log("The veteran is now calculating. Am I on alert?", this.target, this.alerts_left);
+        if (this.target && this.alerts_left > 0) {
+            this.alert = true;
+            this.alerts_left--;
+        }
+    }
+
+    getVisited(visitor) {
+        super.getVisited(visitor);
+
+        console.log("A veteran was visited. Alert?", this.alert);
+        if (this.alert) {
+            visitor.attackers.push([this, Power.POWERFUL, "shot by a veteran"]);
+            this.sendMessage("You shot someone who visited you");
+            return false;
+        }
+
+        return true;
     }
 }
 
@@ -1175,6 +1293,30 @@ class Seer extends Player {
             }
         }
     }
+
+    performRole() {
+        this.target.getVisited(this); // Action was already done. We just get the counter attacks from our target here
+    }
+}
+
+class Spy extends Player {
+    init() {
+        this.role = Role.SPY;
+        this.alignment = Alignment.GOOD;
+        this.seer_result = Alignment.GOOD;
+        this.faction = Faction.VILLAGE;
+
+        this.witchImmune = false;
+    }
+
+    performRole() {
+        if (!this.canPerformRole()) return;
+        if (!this.target.getVisited(this)) return;
+        
+        for (var visitor of this.target.visitors) {
+            this.sendMessage(visitor.name + " has visited your target");
+        }
+    }
 }
 
 class Witch extends Player {
@@ -1196,10 +1338,10 @@ class Witch extends Player {
     }
 
     isActive(game) {
-        console.log("Checking if a witch is active");
-        console.log("Current order", game.NightPlayOrder[game.nightIndex], "my order", this.role);
-        console.log("am i dead", this.dead);
-        console.log("Did i already play", this.target);
+        // console.log("Checking if a witch is active");
+        // console.log("Current order", game.NightPlayOrder[game.nightIndex], "my order", this.role);
+        // console.log("am i dead", this.dead);
+        // console.log("Did i already play", this.target);
         return game.NightPlayOrder[game.nightIndex] == this.role && !this.dead && this.target !== false && this.target.length < 2;
     }
 
@@ -1219,6 +1361,11 @@ class Witch extends Player {
     }
 
     performRole() {
+        if (!target[0].getVisited(this)) {
+            this.target[0].sendMessage("A witch has tried to control you but you attacked her instead!");
+            return;
+        }
+
         this.target[0].sendMessage("You feel a mystical power dominating you... You were witched!");
         if (!this.target[0].witchImmune) {
             this.target[0].target = this.target[1];
@@ -1233,7 +1380,10 @@ const RoleGenerators = dict(
     [Role.HEALER, Healer],
     [Role.SEER, Seer],
     [Role.WITCH, Witch],
-    [Role.JESTER, Jester]
+    [Role.JESTER, Jester],
+    [Role.PRIEST, Priest],
+    [Role.VETERAN, Veteran],
+    [Role.SPY, Spy]
 )
 
 const createPlayer = (id, name, image, color, role) => {
