@@ -36,7 +36,7 @@ const Role = {
     WITCH: "WITCH",
 
     // Arsonist
-    ARSONIST: "ARSONIST", // TODO
+    ARSONIST: "ARSONIST",
 
     // Neutral roles
     JESTER: "JESTER",
@@ -53,7 +53,8 @@ const Faction = {
     VILLAGE: "VILLAGE",
     WEREWOLVES: "WEREWOLVES",
     NEUTRAL: "NEUTRAL",
-    WITCH: "WITCH"
+    WITCH: "WITCH",
+    ARSONIST: "ARSONIST"
 }
 
 const Power = {
@@ -79,6 +80,7 @@ const NightPlayOrder = [
     Role.HEALER,
     Role.SEER,
     Role.PRIEST,
+    Role.ARSONIST,
     Role.INVESTIGATOR,
     Role.SPY
 ];
@@ -88,6 +90,7 @@ const NightCalculationOrder = [
     Role.JESTER,
     Role.VETERAN,
     Role.WEREWOLF,
+    Role.ARSONIST,
     Role.PRIEST,
     Role.HEALER,
     Role.SEER,
@@ -100,7 +103,7 @@ const NightDetails = dict(
     [Role.WEREWOLF, {
         summon_message: "Werewolves, wake up. Pick a player to attack.",
         end_message: "Good night, werewolves.",
-        timer: 3000000
+        timer: 30000
     }],
     [Role.HEALER, {
         summon_message: "Healer, wake up. Pick a player to heal.",
@@ -144,6 +147,11 @@ const NightDetails = dict(
         summon_message: "Investigator, wake up. Pick a player to investigate.",
         end_message: "Good night, investigator.",
         timer: 10000
+    }],
+    [Role.ARSONIST, {
+        summon_message: "Arsonist, wake up. Pick a player to douse or ignite all doused players.",
+        end_message: "Good night, arsonist.",
+        timer: 10000
     }]
 );
 
@@ -160,7 +168,15 @@ const WolfSeerResults = dict(
     [Role.WITCH, "Your target casts mystical spells. They must be a witch!"],
     [Role.ARSONIST, "Your target has fuel cans, they must be an arsonist!"],
     [Role.JESTER, "Your target just wants to be hung. They must be a jester!"]
-)
+);
+
+const randomRole = {
+    "TOWN_INV": ["SEER", "SPY", "INVESTIGATOR"],
+    "TOWN_RAND": ["VILLAGER", "HEALER", "SEER", "PRIEST", "VETERAN", "SPY", "INVESTIGATOR"],
+    "TOWN_ATCK": ["VETERAN", "PRIEST"],
+    "WOLF_RAND": ["WEREWOLF", "WOLF_SEER"],
+    "RANDOM": Object.keys(Role).map(x => Role[x])
+};
 
 function shuffle(a) {
     var j, x, i;
@@ -191,7 +207,7 @@ export class GameRoom {
         this.players = [];
         this.NightPlayOrder = [];
         
-        this.roles = [Role.WOLF_SEER, Role.VILLAGER];
+        this.roles = [Role.ARSONIST, Role.VILLAGER];
         
         this.roomId = id;
     }
@@ -440,7 +456,12 @@ export class GameRoom {
     }
 
     getRole(roleOpts) {
-        if (roleOpts.constructor.name == "String") return roleOpts;
+        if (roleOpts.constructor.name == "String") {
+            if (randomRole[roleOpts]) {
+                return randomOf(randomRole[roleOpts]);
+            }
+            else return roleOpts;
+        }
         else return randomOf(roleOpts);
     }
 
@@ -469,9 +490,19 @@ export class GameRoom {
 
     calculateNightOrder() {
         var r = [];
+        console.log(this.roles);
         for (var role of this.roles) {
             if (role.constructor.name == "String") {
-                if (!~r.indexOf(role)) {
+
+                if (randomRole[role]) {
+                    for (var rrole of randomRole[role]) {
+                        if (!~r.indexOf(rrole)) {
+                            r.push(rrole);
+                        }
+                    }
+                }
+
+                else if (!~r.indexOf(role)) {
                     r.push(role);
                 }
             }
@@ -719,7 +750,7 @@ export class GameRoom {
     }
 
     __msg__add_role(client, data) {
-        if (Role[data]) {
+        if (Role[data] || randomRole[data]) {
             this.roles.push(data);
             this.syncRolesList();
         }
@@ -867,6 +898,7 @@ export class GameRoom {
         var werewolves = alive.filter(x => x.faction == Faction.WEREWOLVES);
         var neutral = alive.filter(x => x.faction == Faction.NEUTRAL);
         var witches = alive.filter(x => x.faction == Faction.WITCH);
+        var arsonists = alive.filter(x => x.faction == Faction.ARSONIST);
 
         var healers = alive.filter(x => x.role == Role.HEALER);
 
@@ -908,6 +940,10 @@ export class GameRoom {
 
         if (witches.length + neutral.length == alive.length) {
             return Faction.WITCH;
+        }
+
+        if (arsonists.length + neutral.length == alive.length) {
+            return Faction.ARSONIST;
         }
 
         // Uncalculated stalemate prevention
@@ -1390,6 +1426,47 @@ class Seer extends Player {
     }
 }
 
+class Arsonist extends Player {
+    init() {
+        this.role = Role.ARSONIST;
+        this.alignment = Alignment.CHAOS;
+        this.seer_result = Alignment.EVIL;
+        this.faction = Faction.ARSONIST;
+
+        this.witchImmune = true;
+    }
+
+    setTarget(input, game) {
+        var p = game.getPlayer(input);
+        if (p) {
+            this.target = p;
+        }
+        else {
+            this.target = true;
+        }
+    }
+
+    performRole(game) {
+
+        if (!this.canPerformRole()) return;
+
+        if (this.target == true) {
+            // Igniting
+            for (var p of game.players.filter(x => x.doused)) {
+                p.attackers.push([this, Power.POWERFUL, "incinerated by an arsonist"]);
+            }
+        }
+        else if (this.target == this) {
+            this.doused = false;
+        }
+        else if (this.target) {
+            if (!this.target.getVisited(this)) return;
+
+            this.target.doused = true;
+        }
+    }
+}
+
 class Spy extends Player {
     init() {
         this.role = Role.SPY;
@@ -1464,6 +1541,11 @@ class Witch extends Player {
         this.setTarget = this.setTarget.bind(this);
     }
 
+    isVictorious(winning_faction) {
+        return (winning_faction == this.faction || ~winning_faction.indexOf(this.faction)) && !this.dead;
+        // Witches have to be alive to win
+    }
+
     resetNight() {
         super.resetNight();
 
@@ -1518,10 +1600,12 @@ const RoleGenerators = dict(
     [Role.VETERAN, Veteran],
     [Role.SPY, Spy],
     [Role.INVESTIGATOR, Investigator],
-    [Role.WOLF_SEER, WolfSeer]
+    [Role.WOLF_SEER, WolfSeer],
+    [Role.ARSONIST, Arsonist]
 )
 
 const createPlayer = (id, name, image, color, role) => {
+    console.log(role);
     var player = new (RoleGenerators[role])(id, name, image, color);
     player.init();
     return player;
@@ -1529,6 +1613,8 @@ const createPlayer = (id, name, image, color, role) => {
 
 const copyPlayer = (src, dst) => {
     dst.messages = src.messages;
+    
+    dst.doused = src.doused || false;
 };
 
 const convertPlayer = (player, role) => {

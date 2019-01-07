@@ -2,6 +2,8 @@ import * as game from "./Room";
 
 var room = new game.GameRoom(true);
 
+console.log(Object.keys(game.Role).map(x => game.Role[x]))
+/*
 var yotam = game.createPlayer("11111", "Yotam", "11111.png", "blue", game.Role.WEREWOLF);
 var nirit = game.createPlayer("22222", "Nirit", "22222.png", "blue", game.Role.WOLF_SEER);
 var avi = game.createPlayer("33333", "Avi", "33333.png", "blue", game.Role.HEALER);
@@ -20,4 +22,4 @@ room.calculateWerewolfKill();
 room.calculateNightDeaths();
 room.calculatePromotions();
 room.calculateConversions();
-room.broadcaseNightMessages();
+room.broadcaseNightMessages();*/
