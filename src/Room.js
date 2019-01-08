@@ -913,7 +913,25 @@ export class GameRoom {
         if (village.length + neutral.length == alive.length) {
             return Faction.VILLAGE;
         }
-        
+
+        if (werewolves.length + neutral.length == alive.length) {
+            return Faction.WEREWOLVES
+        }
+
+        if (witches.length + neutral.length == alive.length) {
+            return Faction.WITCH;
+        }
+
+        if (arsonists.length + neutral.length == alive.length) {
+            return Faction.ARSONIST;
+        }
+
+        // Uncalculated stalemate prevention
+        // If there are three nights with no kills, game will stale and a draw will be announced
+        if (this.night >= 3 && this.nights_no_kill >= 3) {
+            return "DRAW";
+        }
+
         // Witch vs town delayed victory
         // If witch is against the town (with no WWs), if the town does not have
         // killing roles such as priests or veterans, witch should immediately lose
@@ -932,24 +950,6 @@ export class GameRoom {
         // If 1 ww + 1 healer are alive, draw should be immediately called
         if (healers.length == 1 && werewolves.length == 1) {
             return [Faction.VILLAGE, Faction.WEREWOLVES];
-        }
-
-        if (werewolves.length + neutral.length == alive.length) {
-            return Faction.WEREWOLVES
-        }
-
-        if (witches.length + neutral.length == alive.length) {
-            return Faction.WITCH;
-        }
-
-        if (arsonists.length + neutral.length == alive.length) {
-            return Faction.ARSONIST;
-        }
-
-        // Uncalculated stalemate prevention
-        // If there are three nights with no kills, game will stale and a draw will be announced
-        if (this.night >= 3 && this.nights_no_kill >= 3) {
-            return "DRAW";
         }
 
         return null;
@@ -1136,6 +1136,7 @@ class Player {
             if (!defense || attack[1] > defense[1]) {
                 // Killed
                 this.kill();
+                this.sendMessage("You have died!");
 
                 var callouts = ["Tonight, we found " + this.name + ", dead in their home."];
                 for (var a in this.attackers) {
@@ -1293,6 +1294,7 @@ class Jester extends Player {
         this.target.getVisited(this); // The jester can attack no matter what. We don't take the return value
 
         this.target.attackers.push([this, Power.UNSTOPPABLE, "haunted by the jester"]);
+        this.target.sendMessage("In your dream... You saw a Jester! Then a bright white light...")
     }
 
     execute() {
@@ -1339,9 +1341,11 @@ class Priest extends Player {
         if (!this.target.getVisited(this)) return;
 
         this.target.attackers.push([this, Power.BASIC, "attacked by a priest"]);
+        this.target.sendMessage("You were attacked by a priest!");
         
         if (this.target.alignment == Alignment.GOOD) {
             this.attackers.push([null, Power.BASIC, "killed by a divine power"]);
+            this.target.sendMessage("You will pay for your sins with your life!");
         }
     }
 }
@@ -1390,6 +1394,7 @@ class Veteran extends Player {
         console.log("A veteran was visited. Alert?", this.alert);
         if (this.alert) {
             visitor.attackers.push([this, Power.POWERFUL, "shot by a veteran"]);
+            visitor.sendMessage("You were shot by the veteran you visited!");
             this.sendMessage("You shot someone who visited you");
             return false;
         }
@@ -1454,6 +1459,7 @@ class Arsonist extends Player {
             // Igniting
             for (var p of game.players.filter(x => x.doused)) {
                 p.attackers.push([this, Power.POWERFUL, "incinerated by an arsonist"]);
+                this.sendMessage("You burned someone");
             }
         }
         else if (this.target == this) {
@@ -1576,13 +1582,18 @@ class Witch extends Player {
     }
 
     performRole() {
-        if (!target[0].getVisited(this)) {
+
+        if (!this.canPerformRole()) return;
+
+        if (!this.target[0].getVisited(this)) {
             this.target[0].sendMessage("A witch has tried to control you but you attacked her instead!");
+            this.sendMessage("It seems like your target is immune to your spells!");
             return;
         }
 
-        this.target[0].sendMessage("You feel a mystical power dominating you... You were witched!");
         if (!this.target[0].witchImmune) {
+            this.target[0].sendMessage("You feel a mystical power dominating you... You were witched!");
+            this.sendMessage("You witched your target.")
             this.target[0].target = this.target[1];
             this.target[0].witched = true;
         }
@@ -1613,7 +1624,7 @@ const createPlayer = (id, name, image, color, role) => {
 
 const copyPlayer = (src, dst) => {
     dst.messages = src.messages;
-    
+
     dst.doused = src.doused || false;
 };
 
