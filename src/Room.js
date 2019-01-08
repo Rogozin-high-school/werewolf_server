@@ -489,7 +489,7 @@ export class GameRoom {
     }
 
     calculateNightOrder() {
-        var r = [];
+        var r = [Role.WEREWOLF];
         console.log(this.roles);
         for (var role of this.roles) {
             if (role.constructor.name == "String") {
