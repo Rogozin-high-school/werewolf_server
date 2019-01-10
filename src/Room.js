@@ -34,6 +34,8 @@ const Role = {
 
     // Witches
     WITCH: "WITCH",
+    DEATH_WITCH: "DEATH_WITCH",
+    CREEPY_GIRL: "CREEPY_GIRL",
 
     // Arsonist
     ARSONIST: "ARSONIST",
@@ -74,22 +76,26 @@ const dict = function(){
 
 const NightPlayOrder = [
     Role.JESTER,
-    Role.WITCH,
     Role.VETERAN,
+    Role.WITCH,
+    Role.CREEPY_GIRL,
     Role.WEREWOLF,
     Role.HEALER,
     Role.SEER,
     Role.PRIEST,
     Role.ARSONIST,
     Role.INVESTIGATOR,
-    Role.SPY
+    Role.SPY,
+    "SPOOKY_DOLL" // For passing the spooky doll on and on...
 ];
 
 const NightCalculationOrder = [
+    Role.VETERAN,
     Role.WITCH,
     Role.JESTER,
-    Role.VETERAN,
+    Role.CREEPY_GIRL,
     Role.WEREWOLF,
+    Role.DEATH_WITCH,
     Role.ARSONIST,
     Role.PRIEST,
     Role.HEALER,
@@ -103,7 +109,10 @@ const NightDetails = dict(
     [Role.WEREWOLF, {
         summon_message: "Werewolves, wake up. Pick a player to attack.",
         end_message: "Good night, werewolves.",
-        timer: 30000
+        timer: 30000,
+        should_play: function(game) {
+            return game.players.filter(x => x.faction == Faction.WEREWOLVES).length;
+        }
     }],
     [Role.HEALER, {
         summon_message: "Healer, wake up. Pick a player to heal.",
@@ -118,7 +127,10 @@ const NightDetails = dict(
     [Role.WITCH, {
         summon_message: "Witch, wake up. Pick a player to cast your spells on.",
         end_message: "Good night, witch.",
-        timer: 15000
+        timer: 20000,
+        should_play: function(game) {
+            return game.players.filter(x => x.role == Role.WITCH || x.role == Role.DEATH_WITCH).length > 0;
+        }
     }],
     [Role.JESTER, {
         summon_message: "Jester, wake up. Pick a player to haunt.",
@@ -152,6 +164,22 @@ const NightDetails = dict(
         summon_message: "Arsonist, wake up. Pick a player to douse or ignite all doused players.",
         end_message: "Good night, arsonist.",
         timer: 10000
+    }],
+    [Role.CREEPY_GIRL, {
+        summon_message: "Creepy Girl, wake up. Give your doll to a player.",
+        end_message: "Good night, creepy girl.",
+        timer: 10000,
+        should_play: function(game) {
+            return game.players.filter(x => x.role == Role.CREEPY_GIRL).length && game.night == 1;
+        }
+    }],
+    ["SPOOKY_DOLL", {
+        summon_message: "Player with the spooky doll, wake up. Pass the doll on.",
+        end_message: "Good night, spooky doll.",
+        timer: 10000,
+        should_play: function(game) {
+            return game.players.filter(x => x.holds_doll).length && game.night > 1;
+        }
     }]
 );
 
@@ -167,7 +195,9 @@ const WolfSeerResults = dict(
     [Role.WOLF_SEER, "It's like looking at a mirror. Your target is a wolf seer!"],
     [Role.WITCH, "Your target casts mystical spells. They must be a witch!"],
     [Role.ARSONIST, "Your target has fuel cans, they must be an arsonist!"],
-    [Role.JESTER, "Your target just wants to be hung. They must be a jester!"]
+    [Role.JESTER, "Your target just wants to be hung. They must be a jester!"],
+    [Role.DEATH_WITCH, "Your target casts mystical spells. They must be a witch!"],
+    [Role.CREEPY_GIRL, "Your target seems to hold a doll... She must be the creepy girl!"]
 );
 
 const randomRole = {
@@ -207,7 +237,7 @@ export class GameRoom {
         this.players = [];
         this.NightPlayOrder = [];
         
-        this.roles = [Role.ARSONIST, Role.VILLAGER];
+        this.roles = [Role.CREEPY_GIRL, Role.VILLAGER, Role.WEREWOLF];
         
         this.roomId = id;
     }
@@ -401,10 +431,12 @@ export class GameRoom {
     }
 
     endNight() {
+        this.custom_callouts = [];
         this.calculateNightActions();
         this.calculateWerewolfKill();
 
         this.callouts = this.calculateNightDeaths() || ["No one was killed tonight"];
+        for (var c of this.custom_callouts) this.callouts.push(c);
         
         this.calculatePromotions();
         this.calculateConversions();
@@ -427,7 +459,6 @@ export class GameRoom {
     }
 
     broadcaseNightMessages() {
-        console.log("Broadcasting night messages. Player list: ", this.players);
         for (var player of this.players.filter(x => !x.dead_sync)) {
             var c = this.getClient(player.id);
             if (c) c.emit("open_messages", player.messages);
@@ -489,7 +520,8 @@ export class GameRoom {
     }
 
     calculateNightOrder() {
-        var r = [Role.WEREWOLF];
+        var r = [Role.WEREWOLF, Role.WITCH, "SPOOKY_DOLL"];
+
         console.log(this.roles);
         for (var role of this.roles) {
             if (role.constructor.name == "String") {
@@ -538,9 +570,10 @@ export class GameRoom {
     }
 
     getActivePlayers() {
+        console.log("Looking for active players");
         var ps = [];
         for (var p of this.players) {
-            if (p.isActive(this)) {
+            if (p.__isActive(this)) {
                 p.active = true;
                 ps.push(p);
             }
@@ -623,24 +656,31 @@ export class GameRoom {
                 }
             }
         }
+
+        for (var player of this.players) {
+            if (player.doll_giveto) player.giveDoll(this); // Giving the doll away
+        }
     }
 
     calculateNightDeaths() {
         var day_callouts = [];
         for (var player of this.players.filter(x => !x.dead)) {
-            var data = player.calculateKill();
+            var data = player.calculateKill(this);
             if (data) {
                 day_callouts.push(...data);
             }
         }
 
         var killsTonight = this.players.filter(x => x.dead && !x.dead_sync);
-        if (killsTonight) {
+        console.log("This night kills:", killsTonight);
+        if (killsTonight.length > 0) {
             this.nights_no_kill = 0;
         }
         else {
             this.nights_no_kill++;
         }
+
+        console.log("Nights with no killing", this.nights_no_kill);
 
         return day_callouts;
     }
@@ -677,7 +717,8 @@ export class GameRoom {
             timer: this.timer_shown ? this.timer : null,
             message: this.message || null,
             player_on_stand: this.player_on_stand ? this.player_on_stand.objectify(this) : null,
-            winning_faction: this.winning_faction && this.winning_faction.constructor.name == "String" ? this.winning_faction : "DRAW"
+            winning_faction: this.winning_faction && this.winning_faction.constructor.name == "String" ? this.winning_faction : "DRAW",
+            night_index: this.NightPlayOrder[this.nightIndex]
         };
 
         for (var client of this.clients) {
@@ -715,6 +756,7 @@ export class GameRoom {
     resetNight() {
         this.nightIndex = 0;
         this.nightActionStarted = false;
+        this.custom_callouts = [];
         this.setState(State.NIGHT, null, null, true);
 
         for (var p of this.players) {
@@ -747,6 +789,12 @@ export class GameRoom {
     endNightAction() {
         this.nightActionStarted = false;
         this.nightIndex++;
+    }
+
+    clearDoll() {
+        for (var p of this.players) {
+            p.holds_doll = false;
+        }
     }
 
     __msg__add_role(client, data) {
@@ -791,7 +839,12 @@ export class GameRoom {
         console.log("Night action:", data);
         var p = this.getPlayer(client.id);
         if (p) {
-            p.setTarget(data, this);
+            if (this.NightPlayOrder[this.nightIndex] == "SPOOKY_DOLL") {
+                p.setDollGive(data, this);
+            }
+            else {
+                p.setTarget(data, this);
+            }
         }
 
         this.getActivePlayers();
@@ -895,9 +948,11 @@ export class GameRoom {
     getWinningFaction() {
         var alive = this.players.filter(x => !x.dead);
         var village = alive.filter(x => x.faction == Faction.VILLAGE);
+        var priests = village.filter(x => x.role == Role.PRIEST);
         var werewolves = alive.filter(x => x.faction == Faction.WEREWOLVES);
         var neutral = alive.filter(x => x.faction == Faction.NEUTRAL);
-        var witches = alive.filter(x => x.faction == Faction.WITCH);
+        var witches = alive.filter(x => x.role == Role.WITCH);
+        var witch_team = alive.filter(x => x.faction == Faction.WITCH);
         var arsonists = alive.filter(x => x.faction == Faction.ARSONIST);
 
         var healers = alive.filter(x => x.role == Role.HEALER);
@@ -918,7 +973,7 @@ export class GameRoom {
             return Faction.WEREWOLVES
         }
 
-        if (witches.length + neutral.length == alive.length) {
+        if (witch_team.length + neutral.length == alive.length) {
             return Faction.WITCH;
         }
 
@@ -929,13 +984,13 @@ export class GameRoom {
         // Uncalculated stalemate prevention
         // If there are three nights with no kills, game will stale and a draw will be announced
         if (this.night >= 3 && this.nights_no_kill >= 3) {
-            return "DRAW";
+            return "NOKILL";
         }
 
         // Witch vs town delayed victory
-        // If witch is against the town (with no WWs), if the town does not have
-        // killing roles such as priests or veterans, witch should immediately lose
-        if (village.length + witches.length == alive.length) {
+        // If witch is against 1 town (with no WWs), if the town does not have
+        // killing roles such as priests, witch should immediately lose
+        if (village.length + witches.length + priests.length == 3) {
             return Faction.VILLAGE;
         }
 
@@ -1095,6 +1150,7 @@ class Player {
         this.witched = false; // For witch action
 
         this.convert = null; // For changing player's roles.
+        this.doll_giveto = null; // For passing on the doll
     }
 
     resetDay() {
@@ -1106,11 +1162,39 @@ class Player {
     }
 
     isActive(game) {
-        // console.log("Checking if", this.name, "is active");
-        // console.log("Current order", game.NightPlayOrder[game.nightIndex], "my order", this.role);
-        // console.log("am i dead", this.dead);
-        // console.log("Did i already play", this.target);
+        console.log("Checking if", this.name, "is active");
+        console.log("Current order", game.NightPlayOrder[game.nightIndex], "my order", this.role);
+        console.log("am i dead", this.dead);
+        console.log("Did i already play", this.target);
         return game.NightPlayOrder[game.nightIndex] == this.role && !this.dead && this.target === null;
+    }
+
+    isActive__doll(game) {
+        return game.NightPlayOrder[game.nightIndex] == "SPOOKY_DOLL" && !this.dead && this.holds_doll && this.doll_giveto == null;
+    }
+
+    __isActive(game) {
+        return this.isActive(game) || this.isActive__doll(game);
+    }
+
+    setDollGive(input, game) {
+        console.log("Setting doll give");
+        if (input === false) {
+            this.doll_giveto = false;
+            return;
+        }
+        var p = game.getPlayer(input);
+        if (p != null && !p.dead) {
+            this.doll_giveto = p;
+        }
+    }
+
+    giveDoll() {
+        if (this.doll_giveto) {
+            this.doll_giveto.holds_doll = true;
+            this.holds_doll = false;
+            this.doll_giveto.sendMessage("You have been given the spooky doll");
+        }
     }
 
     setTarget(input, game) {
@@ -1128,14 +1212,14 @@ class Player {
         return !this.dead && this.target;
     }
 
-    calculateKill() {
+    calculateKill(game) {
         var attack = this.attackers.length ? max(this.attackers, x => x[1]) : null;
         var defense = this.healers.length ? max(this.healers, x => x[1]) : null;
 
         if (attack) {
             if (!defense || attack[1] > defense[1]) {
                 // Killed
-                this.kill();
+                this.kill(game);
                 this.sendMessage("You have died!");
 
                 var callouts = ["Tonight, we found " + this.name + ", dead in their home."];
@@ -1159,8 +1243,21 @@ class Player {
         return true; // Regular players don't do much when visited. True means that the visit is possible
     }
 
-    kill() {
+    kill(game) {
         this.dead = true;
+
+        // Handling Creepy Girl doll death
+        if (this.holds_doll) {
+            game.clearDoll();
+            var creepyGirl = game.players.filter(x => x.role == Role.CREEPY_GIRL && !x.dead);
+            if (creepyGirl.length) {
+                for (var girl of creepyGirl) {
+                    girl.setRole(Role.DEATH_WITCH);
+                    girl.sendMessage("Your doll has been taken to the grave, and you are now a Death Witch!");
+                }
+                game.custom_callouts.push("The spooky doll has vanished.");
+            }
+        }
     }
 
     execute() {
@@ -1233,7 +1330,6 @@ class Werewolf extends Player {
 
     werewolfKill(target) {
         if (this.canPerformRole()) {
-            console.log(this.name, "attacking", target.name);
             if (!target.getVisited(this)) return;
             target.attackers.push([this, Power.BASIC, "attacked by a werewolf"]);
         }
@@ -1539,7 +1635,7 @@ class Witch extends Player {
     init() {
         this.role = Role.WITCH;
         this.alignment = Alignment.CHAOS;
-        this.seer_result = Alignment.EVIL;
+        this.seer_result = Alignment.GOOD;
         this.faction = Faction.WITCH;
 
         this.witchImmune = true;
@@ -1600,6 +1696,66 @@ class Witch extends Player {
     }
 }
 
+class DeathWitch extends Player {
+    init() {
+        this.role = Role.DEATH_WITCH;
+        this.alignment = Alignment.CHAOS;
+        this.seer_result = Alignment.EVIL;
+        this.faction = Faction.WITCH;
+
+        this.witchImmune = true;
+    }
+
+    isActive(game) {
+        return !this.dead && game.NightPlayOrder[game.nightIndex] == Role.WITCH && this.target == null;
+    }
+
+    isVictorious(winning_faction) {
+        return (winning_faction == this.faction || ~winning_faction.indexOf(this.faction)) && !this.dead;
+        // Witches have to be alive to win
+    }
+
+    performRole() {
+        if (!this.canPerformRole()) return;
+
+        if (!this.target.getVisited(this)) return;
+
+        this.target.attackers.push([this, Power.POWERFUL, "cursed by a witch"]);
+        this.sendMessage("You have cursed your target");
+    }
+}
+
+class CreepyGirl extends Player {
+    init() {
+        this.role = Role.CREEPY_GIRL;
+        this.alignment = Alignment.CHAOS;
+        this.seer_result = Alignment.GOOD;
+
+        this.faction = Faction.WITCH;
+
+        this.witchImmune = true;
+
+        this.holds_doll = true; // The creepy girl starts with the doll N0
+    }
+
+    performRole() {
+        if (!this.canPerformRole()) return;
+
+        if (!this.target.getVisited(this)) return;
+
+        this.holds_doll = false;
+        this.target.holds_doll = true;
+        this.target.sendMessage("You have been given the spooky doll by the creepy girl");
+    }
+
+    kill(game) {
+        this.dead = true;
+
+        game.clearDoll();
+        game.custom_callouts.push("The spooky doll has vanished.");
+    }
+}
+
 const RoleGenerators = dict(
     [Role.VILLAGER, Villager],
     [Role.WEREWOLF, Werewolf],
@@ -1612,7 +1768,9 @@ const RoleGenerators = dict(
     [Role.SPY, Spy],
     [Role.INVESTIGATOR, Investigator],
     [Role.WOLF_SEER, WolfSeer],
-    [Role.ARSONIST, Arsonist]
+    [Role.ARSONIST, Arsonist],
+    [Role.CREEPY_GIRL, CreepyGirl],
+    [Role.DEATH_WITCH, DeathWitch]
 )
 
 const createPlayer = (id, name, image, color, role) => {
@@ -1626,6 +1784,7 @@ const copyPlayer = (src, dst) => {
     dst.messages = src.messages;
 
     dst.doused = src.doused || false;
+    dst.holds_doll = src.holds_doll || false;
 };
 
 const convertPlayer = (player, role) => {
