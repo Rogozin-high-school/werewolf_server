@@ -1518,13 +1518,21 @@ class Seer extends Player {
         this.witchImmune = false;
     }
 
+    resetNight() {
+        super.resetNight();
+        this.seen_player = null;
+    }
+    
+    // TODO: Inform the players that the Seer is also witch immune!!!!!!!
+
     setTarget(input, game) {
         if (input === true) {
-            this.target = true;
+            this.target = this.seen_player;
         }
         else {
             var c = game.getClient(this.id);
             var p = game.getPlayer(input);
+            this.seen_player = p;
             if (c) {
                 c.emit("seer_result", {seer_result: p ? game.getPlayer(input).seer_result : "GOOD"});
             }

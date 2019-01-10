@@ -110,5 +110,9 @@ io.on("connection", function(socket) {
     });
 });
 
+process.on('uncaughtException', function (err) {
+    console.log('=====> Server error: ', err);
+});
+
 io.listen(12988);
 console.log("Listening on 12988"); 
