@@ -1429,10 +1429,19 @@ class Priest extends Player {
         this.faction = Faction.VILLAGE;
 
         this.witchImmune = false;
+
+        this.abilities = 1;
     }
 
     performRole() {
         if (!this.canPerformRole()) return;
+
+        if (this.abilities > 0) {
+            this.abilities--;
+        }
+        else {
+            return;
+        }
 
         if (!this.target.getVisited(this)) return;
 
