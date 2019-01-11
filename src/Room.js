@@ -1233,7 +1233,8 @@ class Player {
             }
             else {
                 this.sendMessage("Someone attacked you but you were saved!")
-                callouts.push(this.name + " was apparently attacked tonight, but they survived");
+                var callouts = [this.name + " was apparently attacked tonight, but they survived"];
+                return callouts;
             }
         }
     }
