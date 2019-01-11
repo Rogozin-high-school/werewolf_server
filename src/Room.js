@@ -990,9 +990,9 @@ export class GameRoom {
         // Witch vs town delayed victory
         // If witch is against 1 town (with no WWs), if the town does not have
         // killing roles such as priests, witch should immediately lose
-        if (village.length + witches.length + priests.length == 3) {
-            return Faction.VILLAGE;
-        }
+        // if (priests. == 3) {
+        //     return Faction.VILLAGE;
+        // }
 
         // witch vs ww delayed victory
         // In case of 1 witch + 1 ww, no-one can lynch the other.
@@ -1706,7 +1706,7 @@ class Witch extends Player {
         }
 
         if (!this.target[0].witchImmune) {
-            this.target[0].sendMessage("You feel a mystical power dominating you... You were witched!");
+            // this.target[0].sendMessage("You feel a mystical power dominating you... You were witched!");
             this.sendMessage("You witched your target.")
             this.target[0].target = this.target[1];
             this.target[0].witched = true;
