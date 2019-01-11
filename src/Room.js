@@ -1015,7 +1015,7 @@ export class GameRoom {
 
         // WW vs healer stalemate
         // If 1 ww + 1 healer are alive, draw should be immediately called
-        if (healers.length == 1 && werewolves.length == 1) {
+        if (healers.length == 1 && werewolves.length == 1 && alive.length == 2) {
             console.log("Returning healer+ww tie");
             return [Faction.VILLAGE, Faction.WEREWOLVES];
         }
