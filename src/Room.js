@@ -956,29 +956,39 @@ export class GameRoom {
         var witch_team = alive.filter(x => x.faction == Faction.WITCH);
         var arsonists = alive.filter(x => x.faction == Faction.ARSONIST);
 
+        console.log("Alive players,", alive.length);
+        console.log("Village", village.length);
+        console.log("WWs", werewolves.length);
+
         var healers = alive.filter(x => x.role == Role.HEALER);
 
         if (alive.length == 0) {
+            console.log("Returning DRAW");
             return "DRAW";
         }
 
         if (neutral.length == alive.length) {
+            console.log("Returning neutral players victory");
             return Faction.NEUTRAL;
         }
 
         if (village.length + neutral.length == alive.length) {
+            console.log("The village has won (only village players)");
             return Faction.VILLAGE;
         }
 
         if (werewolves.length + neutral.length == alive.length) {
+            console.log("Werewolves won");
             return Faction.WEREWOLVES
         }
 
         if (witch_team.length + neutral.length == alive.length) {
+            console.log("Witch has won");
             return Faction.WITCH;
         }
 
         if (arsonists.length + neutral.length == alive.length) {
+            console.log("Arsonist has won");
             return Faction.ARSONIST;
         }
 
@@ -999,12 +1009,14 @@ export class GameRoom {
         // In case of 1 witch + 1 ww, no-one can lynch the other.
         // In the following night, the witch witches the ww to kill themselves and wins.
         if (witches.length == 1 && werewolves.length == 1) {
+            console.log("Witch+WW witch wins");
             return Faction.WITCH;
         }
 
         // WW vs healer stalemate
         // If 1 ww + 1 healer are alive, draw should be immediately called
         if (healers.length == 1 && werewolves.length == 1) {
+            console.log("Returning healer+ww tie");
             return [Faction.VILLAGE, Faction.WEREWOLVES];
         }
 
