@@ -1008,7 +1008,7 @@ export class GameRoom {
         // witch vs ww delayed victory
         // In case of 1 witch + 1 ww, no-one can lynch the other.
         // In the following night, the witch witches the ww to kill themselves and wins.
-        if (witches.length == 1 && werewolves.length == 1) {
+        if (witches.length == 1 && werewolves.length == 1 && players.length == 2) {
             console.log("Witch+WW witch wins");
             return Faction.WITCH;
         }
