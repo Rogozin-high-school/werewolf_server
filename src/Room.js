@@ -946,6 +946,7 @@ export class GameRoom {
         "NEUTRAL"
     */
     getWinningFaction() {
+        console.log(this);
         var alive = this.players.filter(x => !x.dead);
         var village = alive.filter(x => x.faction == Faction.VILLAGE);
         var priests = village.filter(x => x.role == Role.PRIEST);
