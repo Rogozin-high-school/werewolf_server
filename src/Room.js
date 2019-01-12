@@ -42,6 +42,7 @@ const Role = {
 
     // Neutral roles
     JESTER: "JESTER",
+    FOOL: "FOOL"
 };
 
 const Alignment = {
@@ -56,7 +57,8 @@ const Faction = {
     WEREWOLVES: "WEREWOLVES",
     NEUTRAL: "NEUTRAL",
     WITCH: "WITCH",
-    ARSONIST: "ARSONIST"
+    ARSONIST: "ARSONIST",
+    FOOL: "FOOL"
 }
 
 const Power = {
@@ -196,6 +198,7 @@ const WolfSeerResults = dict(
     [Role.WITCH, "Your target casts mystical spells. They must be a witch!"],
     [Role.ARSONIST, "Your target has fuel cans, they must be an arsonist!"],
     [Role.JESTER, "Your target just wants to be hung. They must be a jester!"],
+    [Role.FOOL, "Your target just wants to be hung. They must be a fool!"],
     [Role.DEATH_WITCH, "Your target casts mystical spells. They must be a witch!"],
     [Role.CREEPY_GIRL, "Your target seems to hold a doll... She must be the creepy girl!"]
 );
@@ -237,7 +240,7 @@ export class GameRoom {
         this.players = [];
         this.NightPlayOrder = [];
         
-        this.roles = [Role.CREEPY_GIRL, Role.VILLAGER, Role.WEREWOLF];
+        this.roles = [Role.FOOL, Role.VILLAGER, Role.VILLAGER];
         
         this.roomId = id;
     }
@@ -946,7 +949,6 @@ export class GameRoom {
         "NEUTRAL"
     */
     getWinningFaction() {
-        console.log(this);
         var alive = this.players.filter(x => !x.dead);
         var village = alive.filter(x => x.faction == Faction.VILLAGE);
         var priests = village.filter(x => x.role == Role.PRIEST);
@@ -956,15 +958,22 @@ export class GameRoom {
         var witch_team = alive.filter(x => x.faction == Faction.WITCH);
         var arsonists = alive.filter(x => x.faction == Faction.ARSONIST);
 
+        var fools_won = this.players.filter(x => x.fool_win && x.role == Role.FOOL && x.dead);
+
         console.log("Alive players,", alive.length);
         console.log("Village", village.length);
         console.log("WWs", werewolves.length);
+        console.log("Fools won", fools_won);
 
         var healers = alive.filter(x => x.role == Role.HEALER);
 
         if (alive.length == 0) {
             console.log("Returning DRAW");
             return "DRAW";
+        }
+
+        if (fools_won.length > 0) {
+            return Faction.FOOL;
         }
 
         if (neutral.length == alive.length) {
@@ -1413,6 +1422,31 @@ class Jester extends Player {
         this.jester_win = true;
         this.haunting = true;
     }
+
+    isVictorious(winning_faction) {
+        return this.dead && this.jester_win; // Todo: Check this one
+    }
+}
+
+class Fool extends Player {
+    init() {
+        this.role = Role.FOOL;
+        this.alignment = Alignment.NEUTRAL;
+        this.seer_result = Alignment.EVIL;
+
+        this.faction = Faction.FOOL;
+    }
+
+    execute() {
+        super.execute();
+
+        console.log("Fool was executed");
+        this.fool_win = true;
+    }
+
+    isVictorious(winning_faction) {
+        return winning_faction == Faction.FOOL && this.dead && this.fool_win;
+    }
 }
 
 class Healer extends Player {
@@ -1614,7 +1648,7 @@ class Spy extends Player {
         if (!this.canPerformRole()) return;
         if (!this.target.getVisited(this)) return;
         
-        for (var visitor of this.target.visitors) {
+        for (var visitor of this.target.visitors.filter(x => x.role != Role.SPY)) {
             this.sendMessage(visitor.name + " has visited your target");
         }
     }
@@ -1801,7 +1835,8 @@ const RoleGenerators = dict(
     [Role.WOLF_SEER, WolfSeer],
     [Role.ARSONIST, Arsonist],
     [Role.CREEPY_GIRL, CreepyGirl],
-    [Role.DEATH_WITCH, DeathWitch]
+    [Role.DEATH_WITCH, DeathWitch],
+    [Role.FOOL, Fool]
 )
 
 const createPlayer = (id, name, image, color, role) => {
