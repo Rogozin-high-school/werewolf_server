@@ -13,6 +13,8 @@ const manager = new RoomManager();
 
 const libmoji = require("./src/libmoji");
 
+const VERSION = "1.0.2";
+
 function randomAvatar() {
     let gender = libmoji.genders[libmoji.randInt(2)];
     let style = [ 'cm', 5 ];
@@ -54,6 +56,10 @@ io.on("connection", function(socket) {
         player.id = socket.id;
         manager.joinRoom(roomId, socket);
         socket.emit("room", roomId);
+    });
+
+    socket.on("version", function() {
+        socket.emit("version", VERSION);
     });
 
     socket.on("details", function(data) {

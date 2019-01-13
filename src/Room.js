@@ -1849,6 +1849,9 @@ const createPlayer = (id, name, image, color, role) => {
 const copyPlayer = (src, dst) => {
     dst.messages = src.messages;
 
+    dst.dead = src.dead; // Fixing the creepy girl not dying bug (todo: consider not fixing it, reviving the creepy girl)
+    dst.dead_sync = src.dead_sync;
+
     dst.doused = src.doused || false;
     dst.holds_doll = src.holds_doll || false;
 };
