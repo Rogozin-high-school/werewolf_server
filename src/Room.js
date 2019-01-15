@@ -240,7 +240,24 @@ export class GameRoom {
         this.players = [];
         this.NightPlayOrder = [];
         
-        this.roles = [Role.FOOL, Role.VILLAGER, Role.VILLAGER];
+        this.roles = [
+            Role.WEREWOLF,
+            Role.HEALER,
+            "TOWN_INV",
+            Role.VILLAGER,
+            Role.SEER,
+            Role.FOOL,
+            Role.WEREWOLF,
+            "TOWN_ATCK",
+            "TOWN_INV",
+            "WOLF_RAND",
+            "TOWN_RAND",
+            Role.WITCH,
+            "TOWN_ATCK",
+            "TOWN_INV",
+            Role.ARSONIST,
+            Role.CREEPY_GIRL
+        ];
         
         this.roomId = id;
     }
