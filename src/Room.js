@@ -651,6 +651,11 @@ export class GameRoom {
 
     calculateNightActions() {
         console.log("Calculating night actions");
+
+        for (var player of this.players) {
+            if (player.doll_giveto) player.giveDoll(this); // Giving the doll away
+        }
+
         for (var role of NightCalculationOrder) {
             console.log("Order:", role);
             for (var player of this.players.filter(x => x.role == role)) {
@@ -658,10 +663,6 @@ export class GameRoom {
                     player.performRole(this);
                 }
             }
-        }
-
-        for (var player of this.players) {
-            if (player.doll_giveto) player.giveDoll(this); // Giving the doll away
         }
     }
 
@@ -1668,16 +1669,26 @@ class Investigator extends Player {
         if (!this.canPerformRole()) return;
         if (!this.target.getVisited(this)) return;
 
+        if (this.target.holds_doll) {
+            this.sendMessage("Your target could be a Fortune Teller, Spy or Witch");
+            return;
+        }
+
+        if (this.target.doused) {
+            this.sendMessage("Your target could be a Villager, Arsonist or Veteran");
+            return;
+        }
+
         switch (this.target.role) {
             case Role.VILLAGER:
             case Role.ARSONIST:
             case Role.VETERAN:
                 this.sendMessage("Your target could be a Villager, Arsonist or Veteran");
                 break;
-            case Role.INVESTIGATOR:
+            case Role.DEATH_WITCH:
             case Role.WEREWOLF:
             case Role.PRIEST:
-                this.sendMessage("Your target could be an Investigator, Werewolf or Priest");
+                this.sendMessage("Your target could be a Death Witch, Werewolf or Priest");
                 break;
             case Role.SEER:
             case Role.SPY:
@@ -1689,6 +1700,10 @@ class Investigator extends Player {
             case Role.HEALER:
                 this.sendMessage("Your target could be a Jester, Wolf Seer or Healer");
                 break;
+            case Role.INVESTIGATOR:
+            case Role.FOOL:
+            case Role.CREEPY_GIRL:
+                this.sendMessage("Your target could be an Investigator, Fool or Creepy Girl");
             default:
                 this.sendMessage("Your target's role could not be determined");
                 break;
