@@ -120,5 +120,6 @@ process.on('uncaughtException', function (err) {
     console.log('=====> Server error: ', err);
 });
 
-io.listen(12988);
-console.log("Listening on 12988"); 
+let port = process.argv[2] || 12988;
+io.listen(port);
+console.log("Listening on " + port);

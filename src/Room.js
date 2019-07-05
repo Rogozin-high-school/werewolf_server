@@ -1258,18 +1258,37 @@ class Player {
 
         if (attack) {
             if (!defense || attack[1] > defense[1]) {
-                // Killed
-                this.kill(game);
-                this.sendMessage("You have died!");
 
-                var callouts = ["Tonight, we found " + this.name + ", dead in their home."];
-                for (var a in this.attackers) {
-                    callouts.push((a == 0 ? "They were apparently " : "They were also ") + 
-                                    (this.attackers[a][2] || "attacked."));
+                if (this.holds_doll)
+                {
+                    // Exception - if the player holds the doll, they don't die.
+                    if (this.holds_doll) {
+                        game.clearDoll();
+                        var creepyGirl = game.players.filter(x => x.role == Role.CREEPY_GIRL && !x.dead);
+                        if (creepyGirl.length) {
+                            for (var girl of creepyGirl) {
+                                girl.setRole(Role.DEATH_WITCH);
+                                girl.sendMessage("Your doll has been taken to the grave, and you are now a Death Witch!");
+                            }
+                            game.custom_callouts.push("The spooky doll has vanished.");
+                        }
+                    }
                 }
-                callouts.push(["deadsync", this]);
-                callouts.push("Rest in peace, " + this.name);
-                return callouts;
+                else
+                {
+                    // Killed
+                    this.kill(game);
+                    this.sendMessage("You have died!");
+
+                    var callouts = ["Tonight, we found " + this.name + ", dead in their home."];
+                    for (var a in this.attackers) {
+                        callouts.push((a == 0 ? "They were apparently " : "They were also ") + 
+                                        (this.attackers[a][2] || "attacked."));
+                    }
+                    callouts.push(["deadsync", this]);
+                    callouts.push("Rest in peace, " + this.name);
+                    return callouts;
+                }
             }
             else {
                 this.sendMessage("Someone attacked you but you were saved!")
@@ -1286,19 +1305,6 @@ class Player {
 
     kill(game) {
         this.dead = true;
-
-        // Handling Creepy Girl doll death
-        if (this.holds_doll) {
-            game.clearDoll();
-            var creepyGirl = game.players.filter(x => x.role == Role.CREEPY_GIRL && !x.dead);
-            if (creepyGirl.length) {
-                for (var girl of creepyGirl) {
-                    girl.setRole(Role.DEATH_WITCH);
-                    girl.sendMessage("Your doll has been taken to the grave, and you are now a Death Witch!");
-                }
-                game.custom_callouts.push("The spooky doll has vanished.");
-            }
-        }
     }
 
     execute() {
