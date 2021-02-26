@@ -1,4 +1,4 @@
-import { dict } from "./util";
+import { dict, shuffle, randomOf, maxOf } from "./util";
 import { 
     State,
     Role,
@@ -10,36 +10,16 @@ import {
 } from "./game-enums";
 import { NightDetails } from "./roles";
 
-function shuffle(a) {
-    var j, x, i;
-    for (i = a.length - 1; i > 0; i--) {
-        j = Math.floor(Math.random() * (i + 1));
-        x = a[i];
-        a[i] = a[j];
-        a[j] = x;
-    }
-    return a;
-}
-
-function randomOf(arr) {
-    return arr[Math.floor(Math.random() * arr.length)];
-}
-
-function max(arr, evaluator) {
-    return arr.reduce((prev, current) => evaluator(prev) > evaluator(current) ? prev : current);
-}
-
 export class GameRoom {
-    constructor(id, isTest = false) {
-        if (isTest) {
-            this.DEBUG = true;
-        }
-
+    constructor(roomId) {
+        // Clients are all connected devices, players are the in-game characters.
+        // While players can die or change role, clients are fixed.
         this.clients = [];
         this.players = [];
-        this.NightPlayOrder = [];
+
+        this.nightPlayOrder = [];
         
-        this.roles = [
+        this.rolesBank = [
             Role.WEREWOLF,
             Role.HEALER,
             "TOWN_INV",
@@ -58,11 +38,8 @@ export class GameRoom {
             Role.CREEPY_GIRL
         ];
         
-        this.roomId = id;
-    }
+        this.roomId = roomId;
 
-    onInit() {
-        console.log("Room was initialized", this.roomId);
         this.reset();
     }
 
@@ -83,21 +60,29 @@ export class GameRoom {
         this.syncGamestate();
     }
 
-    onDispose(client) {
-        console.log("Disposed room", this.roomId);
-    }
-
     setTimer(millis) {
         if (!millis)
-            this.timer = null;
+            this.unsetTimer();
         else
             this.timer = new Date().getTime() + millis;
     }
 
-    setState(newState, timer, timer_hidden, noUpdate) {
+    unsetTimer() {
+        this.timer = null;
+    }
+
+    /* 
+    setState changes the room state and starts a timer for the next state update
+    Args:
+        newState - the state to transfer to
+        timer - milliseconds to set the timer to
+        timerHidden - if true, the timer in the GUI will be hidden in the new state
+        noUpdate - if true, does not send the gamestate update to the clients on the current state update
+    */
+    setState(newState, timer, timerHidden, noUpdate) {
         this.state = newState;
         this.setTimer(timer);
-        this.timer_shown = !timer_hidden;
+        this.timer_shown = !timerHidden;
         
         if (!noUpdate) {
             this.syncGamestate();
@@ -151,7 +136,7 @@ export class GameRoom {
 
     // Lobby state loop
     onLoop_LOBBY() {
-        if (this.hostReady && this.roles.length >= this.clients.length) {
+        if (this.hostReady && this.rolesBank.length >= this.clients.length) {
             // In order to start we verify that the roles are sufficient for the players
             this.startRoleSelection();
         }
@@ -183,8 +168,8 @@ export class GameRoom {
             this.nightActionDone = true;
             
 
-            this.setTimer(null);
-            this.speak(NightDetails[this.NightPlayOrder[this.nightIndex]].end_message);
+            this.unsetTimer();
+            this.speak(NightDetails[this.nightPlayOrder[this.nightIndex]].end_message);
             
             setTimeout(() => {
                 this.tryIncrementNightAction();
@@ -196,8 +181,8 @@ export class GameRoom {
         console.log("No active players left, incrementing nightIndex");
         this.endNightAction();
         
-        if (this.nightIndex < this.NightPlayOrder.length) {
-            console.log("Continuing to play. Current night order", this.NightPlayOrder[this.nightIndex]);
+        if (this.nightIndex < this.nightPlayOrder.length) {
+            console.log("Continuing to play. Current night order", this.nightPlayOrder[this.nightIndex]);
             this.startNightAction();
         }
         else {
@@ -320,7 +305,7 @@ export class GameRoom {
         this.speak("Players, prepare for your roles!");
 
         // Shuffling the roles deck (cards deck)
-        var deck = this.roles.slice(0, this.clients.length);
+        var deck = this.rolesBank.slice(0, this.clients.length);
         for (var i = 0; i < 100; i++) {
             shuffle(deck);
         }
@@ -341,8 +326,8 @@ export class GameRoom {
     calculateNightOrder() {
         var r = [Role.WEREWOLF, Role.WITCH, "SPOOKY_DOLL"];
 
-        console.log(this.roles);
-        for (var role of this.roles) {
+        console.log(this.rolesBank);
+        for (var role of this.rolesBank) {
             if (role.constructor.name == "String") {
 
                 if (randomRole[role]) {
@@ -366,14 +351,14 @@ export class GameRoom {
             }
         }
 
-        this.NightPlayOrder.length = 0;
+        this.nightPlayOrder.length = 0;
         for (var play of NightPlayOrder) {
             if (~r.indexOf(play)) {
-                this.NightPlayOrder.push(play);
+                this.nightPlayOrder.push(play);
             }
         }
-        if (this.NightPlayOrder.length == 0) {
-            this.NightPlayOrder.push(Role.WEREWOLF);
+        if (this.nightPlayOrder.length == 0) {
+            this.nightPlayOrder.push(Role.WEREWOLF);
         }
     }
 
@@ -522,7 +507,7 @@ export class GameRoom {
 
     syncRolesList() {
         var gameState = {
-            roles: this.roles
+            roles: this.rolesBank
         };
 
         for (var client of this.clients) {
@@ -538,7 +523,7 @@ export class GameRoom {
             message: this.message || null,
             player_on_stand: this.player_on_stand ? this.player_on_stand.objectify(this) : null,
             winning_faction: this.winning_faction && this.winning_faction.constructor.name == "String" ? this.winning_faction : "DRAW",
-            night_index: this.NightPlayOrder[this.nightIndex]
+            night_index: this.nightPlayOrder[this.nightIndex]
         };
 
         for (var client of this.clients) {
@@ -547,7 +532,7 @@ export class GameRoom {
     }
 
     speak(message) {
-        if (!this.DEBUG && this.clients.length > 0)
+        if (this.clients.length > 0)
             this.clients[0].emit("speak", message);
     }
 
@@ -587,8 +572,8 @@ export class GameRoom {
     }
 
     startNightAction() {
-        console.log("Starting night action", this.NightPlayOrder, this.NightPlayOrder[this.nightIndex]);
-        var filter = NightDetails[this.NightPlayOrder[this.nightIndex]].should_play;
+        console.log("Starting night action", this.nightPlayOrder, this.nightPlayOrder[this.nightIndex]);
+        var filter = NightDetails[this.nightPlayOrder[this.nightIndex]].should_play;
         if (filter && !filter(this)) {
             this.tryIncrementNightAction(); // recursive but it's ok by me
             return;
@@ -599,11 +584,11 @@ export class GameRoom {
         this.nightActionStarted = true;
 
         this.minTime = new Date().getTime() + Math.random() * 9000;
-        this.setTimer(NightDetails[this.NightPlayOrder[this.nightIndex]].timer);
+        this.setTimer(NightDetails[this.nightPlayOrder[this.nightIndex]].timer);
 
         this.syncGamestate();
         this.speak(
-            NightDetails[this.NightPlayOrder[this.nightIndex]].summon_message);
+            NightDetails[this.nightPlayOrder[this.nightIndex]].summon_message);
     }
 
     endNightAction() {
@@ -619,20 +604,20 @@ export class GameRoom {
 
     __msg__add_role(client, data) {
         if (Role[data] || randomRole[data]) {
-            this.roles.push(data);
+            this.rolesBank.push(data);
             this.syncRolesList();
         }
     }
 
     __msg__remove_role(client, data) {
-        if (data < this.roles.length) {
-            this.roles.splice(data, 1);
+        if (data < this.rolesBank.length) {
+            this.rolesBank.splice(data, 1);
             this.syncRolesList();
         }
     }
 
     __msg__set_preset(client, data) {
-        this.roles = data;
+        this.rolesBank = data;
         this.syncRolesList();
     }
 
@@ -640,7 +625,7 @@ export class GameRoom {
         console.log("Received START_GAME");
         if (this.state != State.LOBBY) return; // Can only start game while in lobby
         if (client.id != this.clients[0].id) return; // Only the host can start the game
-        if (this.roles.length < this.clients.length) return; // Not enough role cards to start?
+        if (this.rolesBank.length < this.clients.length) return; // Not enough role cards to start?
 
         this.startRoleSelection();
     }
@@ -659,7 +644,7 @@ export class GameRoom {
         console.log("Night action:", data);
         var p = this.getPlayer(client.id);
         if (p) {
-            if (this.NightPlayOrder[this.nightIndex] == "SPOOKY_DOLL") {
+            if (this.nightPlayOrder[this.nightIndex] == "SPOOKY_DOLL") {
                 p.setDollGive(data, this);
             }
             else {
@@ -911,7 +896,6 @@ export class RoomManager {
         var r = new GameRoom(this.generateValidatedId());
         this.rooms.push(r);
 
-        r.onInit();
         this.dump();
         return r.roomId;
     }
@@ -945,7 +929,6 @@ export class RoomManager {
 
     tryDispose(room) {
         if (room.clients.length == 0) {
-            room.onDispose();
             this.rooms.splice(this.rooms.findIndex(x => x.roomId == room.roomId), 1);            
         }
     }
@@ -1052,8 +1035,8 @@ class Player {
     }
 
     calculateKill(game) {
-        var attack = this.attackers.length ? max(this.attackers, x => x[1]) : null;
-        var defense = this.healers.length ? max(this.healers, x => x[1]) : null;
+        var attack = this.attackers.length ? maxOf(this.attackers, x => x[1]) : null;
+        var defense = this.healers.length ? maxOf(this.healers, x => x[1]) : null;
 
         if (attack) {
             if (!defense || attack[1] > defense[1]) {
