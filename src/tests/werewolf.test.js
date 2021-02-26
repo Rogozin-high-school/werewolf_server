@@ -1,4 +1,4 @@
-import { GameRoom, Role } from "../Room";
+import { GameRoom, Role } from "../room";
 import {testPlayer} from './tests-utils';
 
 describe("werewolf role", () => {
@@ -10,7 +10,7 @@ describe("werewolf role", () => {
         let werewolf = testPlayer(Role.WEREWOLF, "2");
 
         room.players = [villager, werewolf];
-        room.NightPlayOrder = [Role.WEREWOLF];
+        room.nightPlayOrder = [Role.WEREWOLF];
 
         room.resetNight();
 
@@ -28,7 +28,7 @@ describe("werewolf role", () => {
         let werewolf = testPlayer(Role.WEREWOLF, "2");
 
         room.players = [villager, werewolf];
-        room.NightPlayOrder = [Role.WEREWOLF];
+        room.nightPlayOrder = [Role.WEREWOLF];
 
         room.resetNight();
 
