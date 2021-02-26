@@ -10,6 +10,7 @@ const server = new Server(app);
 const io = socketio(server);
 const manager = new RoomManager();
 
+// TODO: How do we handle versioning?
 const VERSION = "1.0.3";
 
 const ServerMessage = {
