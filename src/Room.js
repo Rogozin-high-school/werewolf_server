@@ -97,67 +97,30 @@ export class GameRoom {
     Called every 500ms and should update the game states
     */
     onLoop() {
-        switch (this.state) {
-            case State.LOBBY:
-                // this.onLoop_LOBBY();
-                break;
-            case State.ROLE_SELECTION:
-                this.onLoop_ROLESELECTION();
-                break;
-            case State.PRE_GAME:
-                this.onLoop_PREGAME();
-                break;
-            case State.NIGHT_TRANSITION:
-                this.onLoop_NIGHTTRANSITION();
-                break;
-            case State.NIGHT:
-                this.onLoop_NIGHT();
-                break;
-            case State.DAY_TRANSITION:
-                this.onLoop_DAYTRANSITION();
-                break;
-            case State.DAY_CALLOUTS:
-                this.onLoop_DAYCALLOUTS();
-                break;
-            case State.DISCUSSION:
-                this.onLoop_DISCUSSION();
-                break;
-            case State.TRIAL:
-                this.onLoop_TRIAL();
-                break;
-            case State.EXECUTION:
-                this.onLoop_EXECUTION();
-                break;
-            case State.GAME_OVER:
-                this.onLoop_GAMEOVER();
-                break;
+        const loopFunction = "onLoop_" + this.state;
+        if (this[loopFunction]) {
+            this[loopFunction]();
         }
     }
 
     // Lobby state loop
-    onLoop_LOBBY() {
-        if (this.hostReady && this.rolesBank.length >= this.clients.length) {
-            // In order to start we verify that the roles are sufficient for the players
-            this.startRoleSelection();
-        }
+    // onLoop_LOBBY() {
+    //     if (this.hostReady && this.rolesBank.length >= this.clients.length) {
+    //         // In order to start we verify that the roles are sufficient for the players
+    //         this.startRoleSelection();
+    //     }
+    // }
+
+    onLoop_ROLE_SELECTION() {
+        if (this.timerDue()) this.enterPregame();
     }
 
-    onLoop_ROLESELECTION() {
-        if (this.timerDue()) {
-            this.enterPregame();
-        }
+    onLoop_PRE_GAME() {
+        if (this.timerDue()) this.startNightTransition();
     }
 
-    onLoop_PREGAME() {
-        if (this.timerDue()) {
-            this.startNightTransition();
-        }
-    }
-
-    onLoop_NIGHTTRANSITION() {
-        if (this.timerDue()) {
-            this.resetNight();
-        }
+    onLoop_NIGHT_TRANSITION() {
+        if (this.timerDue()) this.resetNight();
     }
 
     onLoop_NIGHT() {
@@ -190,13 +153,13 @@ export class GameRoom {
         }
     }
 
-    onLoop_DAYTRANSITION() {
+    onLoop_DAY_TRANSITION() {
         if (this.timerDue()) {
             this.setState(State.DAY_CALLOUTS, 1);
         }
     }
 
-    onLoop_DAYCALLOUTS() {
+    onLoop_DAY_CALLOUTS() {
         if (this.timerDue()) {
             this.nextDayCallout();
         }
@@ -227,7 +190,7 @@ export class GameRoom {
         }
     }
 
-    onLoop_GAMEOVER() {
+    onLoop_GAME_OVER() {
         if (this.timerDue()) {
             this.reset();
             this.setState(State.LOBBY);
