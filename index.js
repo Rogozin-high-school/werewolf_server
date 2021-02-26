@@ -1,107 +1,112 @@
-const express = require("express");
+import socketio from "socket.io";
+import express from "express";
+import { Server } from "http";
+
+import { RoomManager } from "./src/Room";
+import { randomAvatar, randomName } from "./src/avatars";
+
 const app = express();
-
-const Server = require("http").Server;
 const server = new Server(app);
-
-const socketio = require("socket.io");
-var io = socketio(server);
-
-const { RoomManager, GameRoom } = require("./src/Room");
-
+const io = socketio(server);
 const manager = new RoomManager();
 
-const libmoji = require("./src/libmoji");
-
+// TODO: How do we handle versioning?
 const VERSION = "1.0.3";
 
-function randomAvatar() {
-    let gender = libmoji.genders[libmoji.randInt(2)];
-    let style = [ 'cm', 5 ];
-    let traits = libmoji.randTraits(libmoji.getTraits(gender[0],style[0]));
-    let outfit = libmoji.randOutfit(libmoji.getOutfits(libmoji.randBrand(libmoji.getBrands(gender[0]))));
+const ServerMessage = {
+    CONNECTED: "connected",
+    REFRESH_FAIL: "refresh_fail",
+    ROOM: "room",
+    VERSION: "version",
+    JOIN_ERROR: "join_error",
+    JOINED_ROOM: "room",
+    RANDOM_AVATARS: "bitmoji",
+};
 
-    return libmoji.buildPreviewUrl("head",1,gender[1],style[1],0,traits,outfit);
+const ClientMessage = {
+    DISCONNECTING: "disconnecting",
+    REFRESH_TOKEN: "refresh_token",
+    VERSION: "version",
+    DETAILS: "details",
+    JOIN_ROOM: "join",
+    CREATE_ROOM: "create",
+    LEAVE_ROOM: "leave",
+    TAKE_ACTION_IN_ROOM: "action",
+    GET_RANDOM_AVATARS: "bitmoji",
 }
 
-io.on("connection", function(socket) {
-    console.log("Client has connected");
-    socket.emit("connected");
+io.on("connection", (socket) => {
+    console.log("Client has connected: ");
+    socket.emit(ServerMessage.CONNECTED);
 
-    socket.on("disconnecting", function(reason) {
+    socket.on(ClientMessage.DISCONNECTING, reason => {
         console.log("client disconnected", reason);
         if (socket.room) {
             manager.leaveRoom(socket);
         }
     });
 
-    socket.on("refresh_token", function(token) {
-        var roomId = token.split("/")[0];
-        var socketId = token.split("/")[1];
+    socket.on(ClientMessage.REFRESH_TOKEN, token => {
+        const roomId = token.split("/")[0];
+        const socketId = token.split("/")[1];
 
-        var room = manager.getRoom(roomId);
+        const room = manager.getRoom(roomId);
         if (!room) {
-            socket.emit("refresh_fail");
-            console.log("Refresh token restoration failed: room does not exist");
+            socket.emit(ServerMessage.REFRESH_FAIL);
             return;
         }
 
-        var player = room.getPlayer(socketId);
+        const player = room.getPlayer(socketId);
         if (!player) {
-            socket.emit("refresh_fail");
-            console.log("Refresh token restoration failed: player was not found");
+            socket.emit(ServerMessage.REFRESH_FAIL);
             return;
         }
 
         player.id = socket.id;
         manager.joinRoom(roomId, socket);
-        socket.emit("room", roomId);
+        socket.emit(ServerMessage.ROOM, roomId);
     });
 
-    socket.on("version", function() {
-        socket.emit("version", VERSION);
+    socket.on(ClientMessage.VERSION, () => {
+        socket.emit(ServerMessage.VERSION, VERSION);
     });
 
-    socket.on("details", function(data) {
-        console.log("Received nickname ", socket.id, data);
-        socket.nickname = data.nickname || "foo";
+    socket.on(ClientMessage.DETAILS, data => {
+        socket.nickname = data.nickname || randomName();
         socket.color = data.color || "skyblue";
         socket.image = data.avatar || randomAvatar();
     });
 
-    socket.on("debug", function(data) {
-        console.log("Socket debug >>>", data);
-    })
-
-    socket.on("join", function(data) {
-        var room = manager.getRoom(data);
+    socket.on(ClientMessage.JOIN_ROOM, data => {
+        const room = manager.getRoom(data);
         if (!room) {
-            socket.emit("join_error", "Could not find party ID");
+            socket.emit(ServerMessage.JOIN_ERROR, "Could not find party ID");
             return;
         }
+
         if (room.state != "LOBBY") {
-            socket.emit("join_error", "Room is in the middle of a game");
+            socket.emit(ServerMessage.JOIN_ERROR, "Room is in the middle of a game");
             return;
         }
 
         manager.joinRoom(room.roomId, socket);
-        socket.emit("room", room.roomId);
+        socket.emit(ServerMessage.JOINED_ROOM, room.roomId);
     });
 
-    socket.on("create", function(data) {
-        var room = manager.createRoom();
+    socket.on(ClientMessage.CREATE_ROOM, () => {
+        const room = manager.createRoom();
         manager.joinRoom(room, socket);
-        socket.emit("room", room);
+        socket.emit(ServerMessage.JOINED_ROOM, room);
     });
 
-    socket.on("leave", function(data) {
+    socket.on(ClientMessage.LEAVE_ROOM, () => {
         if (socket.room) {
             manager.leaveRoom(socket);
         }
     });
 
-    socket.on("action", function(data) {
-        var room = socket.room;
+    socket.on(ClientMessage.TAKE_ACTION_IN_ROOM, data => {
+        let room = socket.room;
         if (!room) return;
 
         if (room["__msg__" + data.type]) {
@@ -109,17 +114,23 @@ io.on("connection", function(socket) {
         }
     });
 
-    socket.on("bitmoji", function() {
-        var data = [];
-        for (var i = 0; i < 30; i++) data.push(randomAvatar());
-        socket.emit("bitmoji", data);
+    socket.on(ClientMessage.GET_RANDOM_AVATARS, () => {
+        let data = [];
+        for (var i = 0; i < 50; i++)
+        {
+            data.push(randomAvatar());
+        }
+
+        socket.emit(ServerMessage.RANDOM_AVATARS, data);
     });
 });
 
+// This should suppress all exceptions?
 process.on('uncaughtException', function (err) {
     console.log('=====> Server error: ', err);
 });
 
+// TODO: port configuration. How do we do that properly?
 let port = process.argv[2] || 12988;
 io.listen(port);
 console.log("Listening on " + port);
