@@ -1,3 +1,5 @@
+import { GameRoom } from "./room";
+
 export class RoomManager {
     constructor() {
         this.rooms = [];

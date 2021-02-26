@@ -85,7 +85,7 @@ export const NightDetails = dict(
     }]
 );
 
-export const roleGenerators = {
+export const randomRole = {
     TOWN_INV: [
         Role.SEER,
         Role.SPY,
