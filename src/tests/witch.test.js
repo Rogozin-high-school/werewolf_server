@@ -4,7 +4,7 @@ import {testPlayer} from './tests-utils';
 describe("witch role", () => {
     let room = new GameRoom(true);
 
-    test('werwolf hit villager', () => {
+    test('werwolf hit villager witch redirect it to werewolf', () => {
 
         let villager = testPlayer(Role.VILLAGER, "1");
         let werewolf = testPlayer(Role.WEREWOLF, "2");
@@ -21,7 +21,7 @@ describe("witch role", () => {
 
         room.endNight();
 
-        
+        expect(werewolf.dead).toBe(true)
         expect(villager.dead).toBe(false)
     });
 });
