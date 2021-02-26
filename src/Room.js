@@ -1242,6 +1242,12 @@ class Witch extends Player {
         return game.nightPlayOrder[game.nightIndex] == this.role && !this.dead && this.target !== false && this.target.length < 2;
     }
 
+    /*
+    setTarget is called twice for a witch (corresponds to two clicks in the UI),
+    the first time with the witched player, and the second time with the witch target.
+
+    Do not try to call this function with two parameters (witched player, target). This will not work.
+    */
     setTarget(input, game) {
         if (input === false) {
             this.target = false;
