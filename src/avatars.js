@@ -1,3 +1,4 @@
+import { randomOf } from "./util";
 import { 
     genders, 
     randInt, 
@@ -29,9 +30,5 @@ export function randomName() {
     const firstNames = ["Aalis", "Bogdan", "Cateline", "Drago", "Elena", "Firmin", "Gomes", "Hawise", "Hann", "Isabel"];
     const lastNames = ["Ashdown", "Browne", "Clarke", "Cooper", "Fletcher", "Hughes", "Nash", "Payne", "Walter", "Wood"];
 
-    return pickRandom(firstNames) + " " + pickRandom(lastNames);
-}
-
-function pickRandom(array) {
-    return array[Math.floor(Math.random() * array.length)];
+    return randomOf(firstNames) + " " + randomOf(lastNames);
 }
