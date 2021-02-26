@@ -1,31 +1,19 @@
-const express = require("express");
+import socketio from "socket.io";
+import express from "express";
+import { Server } from "http";
+
+import { RoomManager } from "./src/Room";
+import { randomAvatar } from "./src/avatars";
+
 const app = express();
-
-const Server = require("http").Server;
 const server = new Server(app);
-
-const socketio = require("socket.io");
-var io = socketio(server);
-
-const { RoomManager, GameRoom } = require("./src/Room");
-
+const io = socketio(server);
 const manager = new RoomManager();
-
-const libmoji = require("./src/libmoji");
 
 const VERSION = "1.0.3";
 
-function randomAvatar() {
-    let gender = libmoji.genders[libmoji.randInt(2)];
-    let style = [ 'cm', 5 ];
-    let traits = libmoji.randTraits(libmoji.getTraits(gender[0],style[0]));
-    let outfit = libmoji.randOutfit(libmoji.getOutfits(libmoji.randBrand(libmoji.getBrands(gender[0]))));
-
-    return libmoji.buildPreviewUrl("head",1,gender[1],style[1],0,traits,outfit);
-}
-
 io.on("connection", function(socket) {
-    console.log("Client has connected");
+    console.log("Client has connected: ");
     socket.emit("connected");
 
     socket.on("disconnecting", function(reason) {
