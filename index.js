@@ -2,7 +2,7 @@ import socketio from "socket.io";
 import express from "express";
 import { Server } from "http";
 
-import { RoomManager } from "./src/Room";
+import { RoomManager } from "./src/room-manager";
 import { randomAvatar, randomName } from "./src/avatars";
 
 const app = express();
