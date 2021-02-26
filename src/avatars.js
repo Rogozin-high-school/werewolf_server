@@ -21,3 +21,17 @@ export function randomAvatar() {
 
     return buildPreviewUrl("head",1,gender[1],style[1],0,traits,outfit);
 }
+
+/*
+randomName returns a random nickname
+*/
+export function randomName() {
+    const firstNames = ["Aalis", "Bogdan", "Cateline", "Drago", "Elena", "Firmin", "Gomes", "Hawise", "Hann", "Isabel"];
+    const lastNames = ["Ashdown", "Browne", "Clarke", "Cooper", "Fletcher", "Hughes", "Nash", "Payne", "Walter", "Wood"];
+
+    return pickRandom(firstNames) + " " + pickRandom(lastNames);
+}
+
+function pickRandom(array) {
+    return array[Math.floor(Math.random() * array.length)];
+}
