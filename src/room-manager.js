@@ -24,10 +24,6 @@ export class RoomManager {
         return id;
     }
 
-    dump() {
-        // console.log(this.rooms);
-    }
-
     getRoom(roomId) {
         var r = this.rooms.filter(x => x.roomId == roomId);
         if (!r.length) {
@@ -45,7 +41,6 @@ export class RoomManager {
         var r = new GameRoom(this.generateValidatedId());
         this.rooms.push(r);
 
-        this.dump();
         return r.roomId;
     }
 
@@ -58,7 +53,6 @@ export class RoomManager {
         room.clients.push(socket);
         socket.room = room;
         room.onJoin(socket);
-        this.dump();
     }
 
     leaveRoom(socket) {
@@ -73,7 +67,6 @@ export class RoomManager {
         room.onLeave(socket);
 
         this.tryDispose(room);
-        this.dump();
     }
 
     tryDispose(room) {

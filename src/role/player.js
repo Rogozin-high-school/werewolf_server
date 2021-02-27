@@ -1,4 +1,5 @@
 import { Role } from "../game-enums";
+import { maxOf } from "../util";
 
 export class Player {
     constructor(id, name, image, color) {
