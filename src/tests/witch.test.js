@@ -21,7 +21,7 @@ describe("witch role", () => {
 
         room.endNight();
 
-        expect(werewolf.dead).toBe(true)
-        expect(villager.dead).toBe(false)
+        expect(werewolf.dead).toBe(true);
+        expect(villager.dead).toBe(false);
     });
 });
