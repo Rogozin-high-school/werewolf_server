@@ -1,5 +1,6 @@
-import { GameRoom, Role } from "../room";
-import {testPlayer} from './tests-utils';
+import { GameRoom } from "../room";
+import { Role } from "../game-enums";
+import { testPlayer } from './tests-utils';
 
 
 describe("healer role", () => {
