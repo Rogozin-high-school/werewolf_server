@@ -3,23 +3,27 @@ import { GameRoom } from "./room";
 export class RoomManager {
     constructor() {
         this.rooms = [];
-        setInterval(this.checkOnRooms.bind(this), 300);
+        setInterval(this.runRoomLoopFunction.bind(this), 300);
     }
 
-    checkOnRooms() {
-        for (var r of this.rooms) {
-            r.onLoop.bind(r)();
+    runRoomLoopFunction() {
+        for (var room of this.rooms) {
+            room.onLoop.bind(room)();
         }
     }
 
-    generateId() {
+    generateRandomId() {
         return Math.round(Math.random() * 9000 + 1000).toString();
     }
 
-    generateValidatedId() {
-        var id = this.generateId();
+    /*
+    generateValidRandomId generates a random ID, but also checks that the ID is not already associated with
+    an existing room.
+    */
+    generateValidRandomId() {
+        var id = this.generateRandomId();
         while (this.rooms.filter(x => x.id == id).length > 0) {
-            id = this.generateId();
+            id = this.generateRandomId();
         }
         return id;
     }
@@ -33,12 +37,18 @@ export class RoomManager {
         return r[0];
     }
 
+    removeIfEmpty(room) {
+        if (room.clients.length == 0) {
+            this.removeRoom(room.roomId);
+        }
+    }
+
     removeRoom(roomId) {
         this.rooms.splice(this.rooms.findIndex(r => r.roomId == roomId), 1);
     }
 
     createRoom() {
-        var r = new GameRoom(this.generateValidatedId());
+        var r = new GameRoom(this.generateValidRandomId());
         this.rooms.push(r);
 
         return r.roomId;
@@ -66,12 +76,6 @@ export class RoomManager {
 
         room.onLeave(socket);
 
-        this.tryDispose(room);
-    }
-
-    tryDispose(room) {
-        if (room.clients.length == 0) {
-            this.rooms.splice(this.rooms.findIndex(x => x.roomId == room.roomId), 1);            
-        }
+        this.removeIfEmpty(room);
     }
 }

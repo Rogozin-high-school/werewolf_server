@@ -8,7 +8,7 @@ import {
     NightPlayOrder,
     NightCalculationOrder,
 } from "./game-enums";
-import { NightDetails, randomRole } from "./roles";
+import { NightDetails, randomRolesList } from "./roles";
 import { Player } from "./role/player";
 
 export class GameRoom {
@@ -45,8 +45,10 @@ export class GameRoom {
     }
 
     onJoin(client) {
-        console.log(client.id, "joined", this.roomId);
-        if (this.state == State.LOBBY) this.speak(client.nickname + " has joined the town");
+        if (this.state === State.LOBBY)
+        {
+            this.speak(client.nickname + " has joined the town");
+        }
         
         this.syncClientList();
         this.syncGamestate();
@@ -54,8 +56,10 @@ export class GameRoom {
     }
 
     onLeave(client) {
-        console.log(client.id, "left", this.roomId);
-        if (this.state == State.LOBBY) this.speak(client.nickname + " has left the town");
+        if (this.state === State.LOBBY)
+        {
+            this.speak(client.nickname + " has left the town");
+        }
         
         this.syncClientList();
         this.syncGamestate();
@@ -91,7 +95,7 @@ export class GameRoom {
     }
 
     timerDue() {
-        return this.timer && new Date().getTime() > this.timer;
+        return this.timer && new Date().getTime() >= this.timer;
     }
 
     /*
@@ -142,11 +146,9 @@ export class GameRoom {
     }
 
     tryIncrementNightAction() {
-        console.log("No active players left, incrementing nightIndex");
         this.endNightAction();
         
         if (this.nightIndex < this.nightPlayOrder.length) {
-            console.log("Continuing to play. Current night order", this.nightPlayOrder[this.nightIndex]);
             this.startNightAction();
         }
         else {
@@ -155,34 +157,28 @@ export class GameRoom {
     }
 
     onLoop_DAY_TRANSITION() {
-        if (this.timerDue()) {
-            this.setState(State.DAY_CALLOUTS, 1);
-        }
+        if (this.timerDue()) this.setState(State.DAY_CALLOUTS, 1);
     }
 
     onLoop_DAY_CALLOUTS() {
-        if (this.timerDue()) {
-            this.nextDayCallout();
-        }
+        if (this.timerDue()) this.nextDayCallout();
     }
 
     onLoop_DISCUSSION() {
-        if (this.timerDue()) {
-            this.startNightTransition();
-        }
+        if (this.timerDue()) this.startNightTransition();
     }
 
     onLoop_TRIAL() {
         if (this.timerDue()) {
-            this.speak("The town could not decide whether to lych " + this.player_on_stand.name);
+            this.speak("The town could not decide whether to lych " + this.playerOnStand.name);
             this.trialInnocent();
         }
     }
 
     onLoop_EXECUTION() {
         if (this.timerDue()) {
-            this.player_on_stand.execute()
-            this.player_on_stand = null;
+            this.playerOnStand.execute();
+            this.playerOnStand = null;
 
 
             if (!this.calculateVictory()) {
@@ -199,12 +195,15 @@ export class GameRoom {
     }
 
     endNight() {
-        this.custom_callouts = [];
+        this.customCallouts = [];
         this.calculateNightActions();
         this.calculateWerewolfKill();
 
-        this.callouts = this.calculateNightDeaths() || ["No one was killed tonight"];
-        for (var c of this.custom_callouts) this.callouts.push(c);
+        this.callouts = this.calculateNightDeaths() || ["The town has woken up to a peaceful morning."];
+        for (var c of this.customCallouts)
+        {
+            this.callouts.push(c);
+        }
         
         this.calculatePromotions();
         this.calculateConversions();
@@ -213,8 +212,7 @@ export class GameRoom {
     }
 
     setDayTransition() {
-
-        this.player_on_stand = null;
+        this.playerOnStand = null;
 
         for (var p of this.players) {
             p.resetDay();
@@ -228,16 +226,21 @@ export class GameRoom {
 
     broadcaseNightMessages() {
         for (var player of this.players.filter(x => !x.dead_sync)) {
-            var c = this.getClient(player.id);
-            if (c) c.emit("open_messages", player.messages);
+            var client = this.getClient(player.id);
+            if (client)
+            {
+                client.emit("open_messages", player.messages);
+            }
         }
     }
 
     nextDayCallout() {
+        const DISCUSSION_TIME = 60 * 1000 * 3.5;
+
         var callout = this.callouts.shift();
         if (!callout) {
             if (!this.calculateVictory()) {
-                this.setState(State.DISCUSSION, 60 * 1000 * 3.5);
+                this.setState(State.DISCUSSION, DISCUSSION_TIME);
             }
         }
         else if (callout.constructor.name == "String") {
@@ -247,21 +250,27 @@ export class GameRoom {
             this.setTimer(5000);
         }
         else if (callout.constructor.name == "Array") {
-            if (callout[0] == "deadsync") {
+            if (callout[0] == "deadsync") { // TODO: export deadsync to const and add some explanation
                 callout[1].dead_sync = callout[1].dead;
             }
+
             setTimeout(this.nextDayCallout.bind(this), 1);
         }
     }
 
+    /*
+    getRole gives a role, or returns a random role if it was given an array of roles
+    */
     getRole(roleOpts) {
         if (roleOpts.constructor.name == "String") {
-            if (randomRole[roleOpts]) {
-                return randomOf(randomRole[roleOpts]);
+            if (randomRolesList[roleOpts]) {
+                return randomOf(randomRolesList[roleOpts]);
             }
-            else return roleOpts;
+            
+            return roleOpts;
         }
-        else return randomOf(roleOpts);
+        
+        return randomOf(roleOpts);
     }
 
     startRoleSelection() {
@@ -269,6 +278,7 @@ export class GameRoom {
         this.speak("Players, prepare for your roles!");
 
         // Shuffling the roles deck (cards deck)
+        // TODO: Better role selection algorithm?
         var deck = this.rolesBank.slice(0, this.clients.length);
         for (var i = 0; i < 100; i++) {
             shuffle(deck);
@@ -288,39 +298,36 @@ export class GameRoom {
     }
 
     calculateNightOrder() {
-        var r = [Role.WEREWOLF, Role.WITCH, "SPOOKY_DOLL"];
+        var rolesInGame = {[Role.WEREWOLF]: 1, [Role.WITCH]: 1, [Role.SPOOKY_DOLL]: 1};
 
-        console.log(this.rolesBank);
         for (var role of this.rolesBank) {
             if (role.constructor.name == "String") {
 
-                if (randomRole[role]) {
-                    for (var rrole of randomRole[role]) {
-                        if (!~r.indexOf(rrole)) {
-                            r.push(rrole);
-                        }
+                if (randomRolesList[role]) {
+                    for (var possibleRole of randomRolesList[role]) {
+                        rolesInGame[possibleRole] = 1;
                     }
                 }
-
-                else if (!~r.indexOf(role)) {
-                    r.push(role);
+                else {
+                    rolesInGame[role] = 1;
                 }
             }
             else {
-                for (var rrole of role) {
-                    if (!~r.indexOf(rrole)) {
-                        r.push(rrole);
-                    }
+                for (var possibleRole of role) {
+                    rolesInGame[possibleRole] = 1;
                 }
             }
         }
 
+
         this.nightPlayOrder.length = 0;
-        for (var play of NightPlayOrder) {
-            if (~r.indexOf(play)) {
-                this.nightPlayOrder.push(play);
+        for (var playOrder of NightPlayOrder) {
+            if (rolesInGame[playOrder]) {
+                this.nightPlayOrder.push(playOrder);
             }
         }
+
+        // Stupid check, we should throw an error instead
         if (this.nightPlayOrder.length == 0) {
             this.nightPlayOrder.push(Role.WEREWOLF);
         }
@@ -337,37 +344,38 @@ export class GameRoom {
         this.speak("Get ready to play...");
     }
 
+    // For each player, calculates if they are active, and updates their active cache field
     getActivePlayers() {
-        console.log("Looking for active players");
-        var ps = [];
-        for (var p of this.players) {
-            if (p.__isActive(this)) {
-                p.active = true;
-                ps.push(p);
+        var activePlayers = [];
+        for (var player of this.players) {
+            if (player.__isActive(this)) {
+                player.active = true;
+                activePlayers.push(player);
             }
             else {
-                p.active = false;
+                player.active = false;
             }
         }
-        return ps;
+        return activePlayers;
     }
 
+    // Returns true if a promotion took place
     calculatePromotions() {
-        var player_list_changed = false;
-
-        // Promoting a werewolf team member to being a werewolf
+        // Promoting a werewolf team member to being a werewolf if there are no werewolves.
         if (this.players.filter(x => !x.dead && x.role == Role.WEREWOLF).length == 0) {
-            var nonwws = this.players.filter(x => !x.dead && x.faction == Faction.WEREWOLVES);
-            if (nonwws.length > 0) {
-                shuffle(nonwws);
-                nonwws[0].setRole(Role.WEREWOLF);
-                nonwws[0].sendMessage("All werewolves have died so you have become a werewolf!");
-
-                player_list_changed = true;
+            var nonWWs = this.players.filter(x => !x.dead && x.faction == Faction.WEREWOLVES);
+            if (nonWWs.length == 0) {
+                return false;
             }
+            
+            shuffle(nonWWs);
+            nonWWs[0].setRole(Role.WEREWOLF);
+            nonWWs[0].sendMessage("All werewolves have died so you have become a werewolf!");
+            
+            return true;
         }
 
-        return player_list_changed;
+        return false;
     }
 
     calculateConversions() {
@@ -379,7 +387,6 @@ export class GameRoom {
     }
 
     calculateWerewolfKill() {
-
         var witched = false;
 
         for (var ww of this.players.filter(x => x.role == Role.WEREWOLF && x.target && x.witched)) {
@@ -485,7 +492,7 @@ export class GameRoom {
             players: this.players.map(x => x.objectify(this)),
             timer: this.timer_shown ? this.timer : null,
             message: this.message || null,
-            player_on_stand: this.player_on_stand ? this.player_on_stand.objectify(this) : null,
+            playerOnStand: this.playerOnStand ? this.playerOnStand.objectify(this) : null,
             winning_faction: this.winning_faction && this.winning_faction.constructor.name == "String" ? this.winning_faction : "DRAW",
             night_index: this.nightPlayOrder[this.nightIndex]
         };
@@ -512,7 +519,7 @@ export class GameRoom {
 
         this.minTime = 0;
 
-        this.player_on_stand = null;
+        this.playerOnStand = null;
 
         this.winning_faction = null;
 
@@ -525,7 +532,7 @@ export class GameRoom {
     resetNight() {
         this.nightIndex = 0;
         this.nightActionStarted = false;
-        this.custom_callouts = [];
+        this.customCallouts = [];
         this.setState(State.NIGHT, null, null, true);
 
         for (var p of this.players) {
@@ -567,7 +574,7 @@ export class GameRoom {
     }
 
     __msg__add_role(client, data) {
-        if (Role[data] || randomRole[data]) {
+        if (Role[data] || randomRolesList[data]) {
             this.rolesBank.push(data);
             this.syncRolesList();
         }
@@ -647,7 +654,7 @@ export class GameRoom {
         if (this.state != State.TRIAL) return;  // Can only take this action in the TRIAL state
         if (client.id != this.clients[0].id) return; // Only host can execute/free accusees
 
-        this.speak("The town has decided to set " + this.player_on_stand.name + " free.");
+        this.speak("The town has decided to set " + this.playerOnStand.name + " free.");
 
         this.trialInnocent();
     }
@@ -656,7 +663,7 @@ export class GameRoom {
         if (this.state != State.TRIAL) return;  // Can only take this action in the TRIAL state
         if (client.id != this.clients[0].id) return; // Only host can execute/free accusees
 
-        this.speak("The town has decided to execute " + this.player_on_stand.name + ". May god have mercy on your soul");
+        this.speak("The town has decided to execute " + this.playerOnStand.name + ". May god have mercy on your soul");
 
         this.trialGuilty();
     }
@@ -673,10 +680,10 @@ export class GameRoom {
         
         this.discussion_timer = this.timer - new Date().getTime(); // Preserving the discussion timer
         
-        this.player_on_stand = player;
+        this.playerOnStand = player;
         this.message = player.name + ", you are on trial for conspiracy against the town. What say you?"
         
-        this.speak("The town has decided to put " + this.player_on_stand.name + " on trial.");
+        this.speak("The town has decided to put " + this.playerOnStand.name + " on trial.");
         
         this.setState(State.TRIAL, 60 * 1000);
     }
@@ -1338,7 +1345,7 @@ class CreepyGirl extends Player {
         this.dead = true;
 
         game.clearDoll();
-        game.custom_callouts.push("The spooky doll has vanished.");
+        game.customCallouts.push("The spooky doll has vanished.");
     }
 }
 
