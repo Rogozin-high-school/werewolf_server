@@ -130,6 +130,6 @@ process.on("uncaughtException", function (err) {
 });
 
 // TODO: port configuration. How do we do that properly?
-let port = process.argv[2] || 12988;
+let port = process.env.PORT || 12988;
 io.listen(port);
 console.log("[General] Listening on " + port);
