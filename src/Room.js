@@ -7,7 +7,7 @@ import {
     NightCalculationOrder,
 } from "./game-enums";
 import { NightDetails, randomRole } from "./roles";
-import { createPlayer, convertPlayer } from './role/player';
+import { createPlayer, convertPlayer } from './role/player-utils';
 
 export class GameRoom {
     constructor(roomId) {

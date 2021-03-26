@@ -1,18 +1,17 @@
 import { Player } from "../player";
-import { Role, Alignment, Faction } from '../../game-enums';
+import { Role, Alignment, Faction } from "../../game-enums";
 
 export class Villager extends Player {
+  init() {
+    this.role = Role.VILLAGER;
+    this.alignment = Alignment.GOOD;
+    this.seer_result = Alignment.GOOD;
+    this.faction = Faction.VILLAGE;
 
-    init() {
-        this.role = Role.VILLAGER;
-        this.alignment = Alignment.GOOD;
-        this.seer_result = Alignment.GOOD;
-        this.faction = Faction.VILLAGE;
+    this.witchImmune = true;
+  }
 
-        this.witchImmune = true;
-    }
-
-    isActive() {
-        return false;
-    }
+  isActive() {
+    return false;
+  }
 }
