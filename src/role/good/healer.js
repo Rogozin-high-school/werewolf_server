@@ -13,8 +13,6 @@ export class Healer extends Player {
 
   performRole() {
     if (!this.target.getVisited(this)) return;
-
-    console.log(this.name, "healing", this.target.name);
     this.target.healers.push([this, Power.BASIC]);
   }
 }

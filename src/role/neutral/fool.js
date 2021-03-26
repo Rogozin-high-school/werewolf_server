@@ -1,23 +1,21 @@
-import { Player } from '../player';
-import { Role, Alignment, Faction } from '../../game-enums';
+import { Player } from "../player";
+import { Role, Alignment, Faction } from "../../game-enums";
 
 export class Fool extends Player {
-    init() {
-        this.role = Role.FOOL;
-        this.alignment = Alignment.NEUTRAL;
-        this.seer_result = Alignment.EVIL;
+  init() {
+    this.role = Role.FOOL;
+    this.alignment = Alignment.NEUTRAL;
+    this.seer_result = Alignment.EVIL;
 
-        this.faction = Faction.FOOL;
-    }
+    this.faction = Faction.FOOL;
+  }
 
-    execute() {
-        super.execute();
+  execute() {
+    super.execute();
+    this.fool_win = true;
+  }
 
-        console.log("Fool was executed");
-        this.fool_win = true;
-    }
-
-    isVictorious(winning_faction) {
-        return winning_faction == Faction.FOOL && this.dead && this.fool_win;
-    }
+  isVictorious(winning_faction) {
+    return winning_faction == Faction.FOOL && this.dead && this.fool_win;
+  }
 }

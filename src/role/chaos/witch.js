@@ -29,10 +29,6 @@ export class Witch extends Player {
   }
 
   isActive(game) {
-    // console.log("Checking if a witch is active");
-    // console.log("Current order", game.nightPlayOrder[game.nightIndex], "my order", this.role);
-    // console.log("am i dead", this.dead);
-    // console.log("Did i already play", this.target);
     return (
       game.nightPlayOrder[game.nightIndex] == this.role &&
       !this.dead &&

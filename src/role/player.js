@@ -51,15 +51,6 @@ export class Player {
   }
 
   isActive(game) {
-    console.log("Checking if", this.name, "is active");
-    console.log(
-      "Current order",
-      game.nightPlayOrder[game.nightIndex],
-      "my order",
-      this.role
-    );
-    console.log("am i dead", this.dead);
-    console.log("Did i already play", this.target);
     return (
       game.nightPlayOrder[game.nightIndex] == this.role &&
       !this.dead &&
@@ -81,7 +72,6 @@ export class Player {
   }
 
   setDollGive(input, game) {
-    console.log("Setting doll give");
     if (input === false) {
       this.doll_giveto = false;
       return;

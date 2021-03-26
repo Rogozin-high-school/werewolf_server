@@ -41,8 +41,16 @@ export class GameRoom {
     this.reset();
   }
 
+  log(...args) {
+    console.log("[" + this.roomId + "] " + args.join(" "));
+  }
+
+  debug(...args) {
+    console.debug("[" + this.roomId + "] " + args.join(" "));
+  }
+
   onJoin(client) {
-    console.log(client.id, "joined", this.roomId);
+    this.log(client.id, "joined", this.roomId);
 
     if (this.state == State.LOBBY) {
       this.speak(client.nickname + " has joined the town");
@@ -54,7 +62,7 @@ export class GameRoom {
   }
 
   onLeave(client) {
-    console.log(client.id, "left", this.roomId);
+    this.log(client.id, "left", this.roomId);
 
     if (this.state == State.LOBBY) {
       this.speak(client.nickname + " has left the town");
@@ -140,11 +148,11 @@ export class GameRoom {
   }
 
   tryIncrementNightAction() {
-    console.log("No active players left, incrementing nightIndex");
+    this.debug("No active players left, incrementing nightIndex");
     this.endNightAction();
 
     if (this.nightIndex < this.nightPlayOrder.length) {
-      console.log(
+      this.debug(
         "Continuing to play. Current night order",
         this.nightPlayOrder[this.nightIndex]
       );
@@ -265,6 +273,7 @@ export class GameRoom {
   startRoleSelection() {
     this.calculateNightOrder();
     this.speak("Players, prepare for your roles!");
+    this.log("Starting game");
 
     // Shuffling the roles deck (cards deck)
     var deck = this.rolesBank.slice(0, this.clients.length);
@@ -335,7 +344,7 @@ export class GameRoom {
   }
 
   getActivePlayers() {
-    console.log("Looking for active players");
+    this.debug("Looking for active players");
     var ps = [];
     for (var p of this.players) {
       if (p.__isActive(this)) {
@@ -434,7 +443,7 @@ export class GameRoom {
   calls performRole for all players, in the correct order (determined by NightCalculationOrder)
   */
   calculateNightActions() {
-    console.log("Calculating night actions");
+    this.debug("Calculating night actions");
 
     for (var player of this.players) {
       // Giving the doll away
@@ -442,7 +451,7 @@ export class GameRoom {
     }
 
     for (var role of NightCalculationOrder) {
-      console.log("Order:", role);
+      this.debug("Order:", role);
       for (var player of this.players.filter((x) => x.role == role)) {
         if (player.canPerformRole(this)) {
           player.performRole(this);
@@ -461,14 +470,11 @@ export class GameRoom {
     }
 
     var killsTonight = this.players.filter((x) => x.dead && !x.dead_sync);
-    console.log("This night kills:", killsTonight);
     if (killsTonight.length > 0) {
       this.nights_no_kill = 0;
     } else {
       this.nights_no_kill++;
     }
-
-    console.log("Nights with no killing", this.nights_no_kill);
 
     return deathCallouts;
   }
@@ -557,7 +563,7 @@ export class GameRoom {
   }
 
   startNightAction() {
-    console.log(
+    this.debug(
       "Starting night action",
       this.nightPlayOrder,
       this.nightPlayOrder[this.nightIndex]
@@ -612,7 +618,6 @@ export class GameRoom {
   }
 
   __msg__start_game(client, data) {
-    console.log("Received START_GAME");
     if (this.state != State.LOBBY) return; // Can only start game while in lobby
     if (client.id != this.clients[0].id) return; // Only the host can start the game
     if (this.rolesBank.length < this.clients.length) return; // Not enough role cards to start?
@@ -631,10 +636,10 @@ export class GameRoom {
   }
 
   __msg__night_action(client, data) {
-    console.log("Night action:", data);
+    this.debug("Night action:", data);
     var p = this.getPlayer(client.id);
     if (p) {
-      if (this.nightPlayOrder[this.nightIndex] == "SPOOKY_DOLL") {
+      if (this.nightPlayOrder[this.nightIndex] == Role.SPOOKY_DOLL) {
         p.setDollGive(data, this);
       } else {
         p.setTarget(data, this);
@@ -701,7 +706,7 @@ export class GameRoom {
   }
 
   setTrial(player) {
-    console.log(player.name, "is now on trial");
+    this.log(player.name, "is now on trial");
 
     this.discussion_timer = this.timer - new Date().getTime(); // Preserving the discussion timer
 
@@ -764,15 +769,9 @@ export class GameRoom {
       (x) => x.fool_win && x.role == Role.FOOL && x.dead
     );
 
-    console.log("Alive players,", alive.length);
-    console.log("Village", village.length);
-    console.log("WWs", werewolves.length);
-    console.log("Fools won", fools_won);
-
     var healers = alive.filter((x) => x.role == Role.HEALER);
 
     if (alive.length == 0) {
-      console.log("Returning DRAW");
       return "DRAW";
     }
 
@@ -781,27 +780,22 @@ export class GameRoom {
     }
 
     if (neutral.length == alive.length) {
-      console.log("Returning neutral players victory");
       return Faction.NEUTRAL;
     }
 
     if (village.length + neutral.length == alive.length) {
-      console.log("The village has won (only village players)");
       return Faction.VILLAGE;
     }
 
     if (werewolves.length + neutral.length == alive.length) {
-      console.log("Werewolves won");
       return Faction.WEREWOLVES;
     }
 
     if (witch_team.length + neutral.length == alive.length) {
-      console.log("Witch has won");
       return Faction.WITCH;
     }
 
     if (arsonists.length + neutral.length == alive.length) {
-      console.log("Arsonist has won");
       return Faction.ARSONIST;
     }
 
@@ -822,14 +816,12 @@ export class GameRoom {
     // In case of 1 witch + 1 ww, no-one can lynch the other.
     // In the following night, the witch witches the ww to kill themselves and wins.
     if (witches.length == 1 && werewolves.length == 1 && alive.length == 2) {
-      console.log("Witch+WW witch wins");
       return Faction.WITCH;
     }
 
     // WW vs healer stalemate
     // If 1 ww + 1 healer are alive, draw should be immediately called
     if (healers.length == 1 && werewolves.length == 1 && alive.length == 2) {
-      console.log("Returning healer+ww tie");
       return [Faction.VILLAGE, Faction.WEREWOLVES];
     }
 
