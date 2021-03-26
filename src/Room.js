@@ -207,7 +207,7 @@ export class GameRoom {
     this.callouts = this.calculateNightDeaths() || [
       "No one was killed tonight",
     ];
-    for (var c of this.nextDayCallouts) this.callouts.push(c);
+    this.callouts = [...this.callouts, ...this.nextDayCallouts];
 
     this.calculatePromotions();
     this.calculateConversions();
@@ -286,10 +286,13 @@ export class GameRoom {
   }
 
   calculateNightOrder() {
-    var r = [Role.WEREWOLF, Role.WITCH, "SPOOKY_DOLL"];
+    var r = [Role.WEREWOLF, Role.WITCH, Role.SPOOKY_DOLL];
 
-    console.log(this.rolesBank);
-    for (var role of this.rolesBank) {
+    // We only calculate the night order for roles that can get into the game
+    let rolesBank = this.rolesBank.slice();
+    rolesBank.length = this.clients.length;
+
+    for (var role of rolesBank) {
       if (role.constructor.name == "String") {
         if (RandomRole[role]) {
           for (var rrole of RandomRole[role]) {
@@ -383,25 +386,28 @@ export class GameRoom {
   calculateWerewolfKill() {
     var witched = false;
 
-    for (var ww of this.players.filter(
+    var witchedWerewolves = this.players.filter(
       (x) => x.role == Role.WEREWOLF && x.target && x.witched
-    )) {
-      if (ww.target != target) {
-        ww.werewolfKill(ww.target);
-        witched = true;
-      }
+    );
+    for (var ww of witchedWerewolves) {
+      // A witched werewolf will attack no matter what the werewolves vote! They will attack by themselves and CANCEL the vote!
+      ww.werewolfKill(ww.target);
+      witched = true;
     }
 
-    if (witched) return; // If a werewolf got witched, they will attack INSTEAD the witch target
-    // instead of the voting target
+    if (witched) {
+      return;
+    }
 
+    // Just a fancy way of counting the werewolves votes into a list of elements [[playerID, votesCount], ...]
     var wwVotes = this.players
       .filter((x) => x.role == Role.WEREWOLF && x.target && !x.witched)
       .map((x) => x.target);
-    var votes = [...new Set(wwVotes)].map((y) => [
-      y,
-      wwVotes.filter((n) => n == y).length,
-    ]); // Counting the votes
+    var votes = [...new Set(wwVotes)].map((player) => [
+      player,
+      wwVotes.filter((vote) => vote == player).length,
+    ]);
+
     var targets = [];
     for (var vote of votes) {
       if (targets.length == 0 || targets[0][1] == vote[1]) {
@@ -412,19 +418,21 @@ export class GameRoom {
       }
     }
 
-    var target = null;
-
-    if (targets.length != 0) {
-      target = randomOf(targets)[0];
-      var attacker = randomOf(
-        this.players.filter(
-          (x) => x.role == Role.WEREWOLF && x.target == target
-        )
-      );
-      attacker.werewolfKill(target);
+    if (targets.length === 0) {
+      return;
     }
+
+    // The attacker werewolf is one of the werewolves who voted for the kill
+    var target = randomOf(targets)[0];
+    var attacker = randomOf(
+      this.players.filter((x) => x.role == Role.WEREWOLF && x.target == target)
+    );
+    attacker.werewolfKill(target);
   }
 
+  /*
+  calls performRole for all players, in the correct order (determined by NightCalculationOrder)
+  */
   calculateNightActions() {
     console.log("Calculating night actions");
 
@@ -444,11 +452,11 @@ export class GameRoom {
   }
 
   calculateNightDeaths() {
-    var day_callouts = [];
+    var deathCallouts = [];
     for (var player of this.players.filter((x) => !x.dead)) {
       var data = player.calculateKill(this);
       if (data) {
-        day_callouts.push(...data);
+        deathCallouts.push(...data);
       }
     }
 
@@ -462,7 +470,7 @@ export class GameRoom {
 
     console.log("Nights with no killing", this.nights_no_kill);
 
-    return day_callouts;
+    return deathCallouts;
   }
 
   syncClientList() {
