@@ -43,6 +43,7 @@ export class GameRoom {
 
   onJoin(client) {
     console.log(client.id, "joined", this.roomId);
+
     if (this.state == State.LOBBY) {
       this.speak(client.nickname + " has joined the town");
     }
@@ -54,8 +55,10 @@ export class GameRoom {
 
   onLeave(client) {
     console.log(client.id, "left", this.roomId);
-    if (this.state == State.LOBBY)
+
+    if (this.state == State.LOBBY) {
       this.speak(client.nickname + " has left the town");
+    }
 
     this.syncClientList();
     this.syncGamestate();
@@ -94,21 +97,13 @@ export class GameRoom {
 
   /*
     Called every 500ms and should update the game states
-    */
+  */
   onLoop() {
     const loopFunction = "onLoop_" + this.state;
     if (this[loopFunction]) {
       this[loopFunction]();
     }
   }
-
-  // Lobby state loop
-  // onLoop_LOBBY() {
-  //     if (this.hostReady && this.rolesBank.length >= this.clients.length) {
-  //         // In order to start we verify that the roles are sufficient for the players
-  //         this.startRoleSelection();
-  //     }
-  // }
 
   onLoop_ROLE_SELECTION() {
     if (this.timerDue()) this.enterPregame();
@@ -191,7 +186,7 @@ export class GameRoom {
       this.player_on_stand.execute();
       this.player_on_stand = null;
 
-      if (!this.calculateVictory()) {
+      if (!this.calculateVictoryAndTerminateGame()) {
         this.startNightTransition();
       }
     }
@@ -205,14 +200,14 @@ export class GameRoom {
   }
 
   endNight() {
-    this.custom_callouts = [];
+    this.nextDayCallouts = [];
     this.calculateNightActions();
     this.calculateWerewolfKill();
 
     this.callouts = this.calculateNightDeaths() || [
       "No one was killed tonight",
     ];
-    for (var c of this.custom_callouts) this.callouts.push(c);
+    for (var c of this.nextDayCallouts) this.callouts.push(c);
 
     this.calculatePromotions();
     this.calculateConversions();
@@ -243,7 +238,7 @@ export class GameRoom {
   nextDayCallout() {
     var callout = this.callouts.shift();
     if (!callout) {
-      if (!this.calculateVictory()) {
+      if (!this.calculateVictoryAndTerminateGame()) {
         this.setState(State.DISCUSSION, 60 * 1000 * 3.5);
       }
     } else if (callout.constructor.name == "String") {
@@ -434,7 +429,8 @@ export class GameRoom {
     console.log("Calculating night actions");
 
     for (var player of this.players) {
-      if (player.doll_giveto) player.giveDoll(this); // Giving the doll away
+      // Giving the doll away
+      player.calculateDollTransfer();
     }
 
     for (var role of NightCalculationOrder) {
@@ -504,9 +500,8 @@ export class GameRoom {
         ? this.player_on_stand.objectify(this)
         : null,
       winning_faction:
-        this.winning_faction &&
-        this.winning_faction.constructor.name == "String"
-          ? this.winning_faction
+        this.winningFaction && this.winningFaction.constructor.name == "String"
+          ? this.winningFaction
           : "DRAW",
       night_index: this.nightPlayOrder[this.nightIndex],
     };
@@ -522,8 +517,6 @@ export class GameRoom {
 
   // Initializes the room as if the lobby phase started right now
   reset() {
-    this.hostReady = false;
-
     this.state = State.LOBBY;
     this.timer = null;
     this.timer_shown = false;
@@ -534,7 +527,7 @@ export class GameRoom {
 
     this.player_on_stand = null;
 
-    this.winning_faction = null;
+    this.winningFaction = null;
 
     this.nights_no_kill = 0;
 
@@ -545,7 +538,7 @@ export class GameRoom {
   resetNight() {
     this.nightIndex = 0;
     this.nightActionStarted = false;
-    this.custom_callouts = [];
+    this.nextDayCallouts = [];
     this.setState(State.NIGHT, null, null, true);
 
     for (var p of this.players) {
@@ -835,19 +828,21 @@ export class GameRoom {
     return null;
   }
 
-  calculateVictory() {
-    var f = this.getWinningFaction();
-
-    if (f) {
-      for (var p of this.players) {
-        p.won = p.isVictorious(f);
-      }
-      this.winning_faction = f;
-
-      this.setState(State.GAME_OVER, 16000);
-      return true;
+  /*
+  If there is a victorious faction, this function sets the game state to GAME_OVER and terminates the game.
+  */
+  calculateVictoryAndTerminateGame() {
+    var winningFaction = this.getWinningFaction();
+    if (!winningFaction) {
+      return false;
     }
 
-    return false;
+    for (var p of this.players) {
+      p.won = p.isVictorious(winningFaction);
+    }
+
+    this.winningFaction = winningFaction;
+    this.setState(State.GAME_OVER, 30000);
+    return true;
   }
 }
