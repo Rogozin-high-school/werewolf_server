@@ -13,6 +13,7 @@ import { Arsonist } from "./chaos/arsonist";
 import { CreepyGirl } from "./chaos/creepy-girl";
 import { DeathWitch } from "./chaos/death-witch";
 import { Fool } from "./neutral/fool";
+import { Mason } from "./good/mason"
 
 import { Role } from "../game-enums";
 
@@ -32,4 +33,5 @@ export const RoleGenerators = {
   [Role.CREEPY_GIRL]: CreepyGirl,
   [Role.DEATH_WITCH]: DeathWitch,
   [Role.FOOL]: Fool,
+  [Role.MASON] : Mason,
 };

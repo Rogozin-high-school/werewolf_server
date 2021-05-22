@@ -13,6 +13,11 @@ export const NightDetails = {
       );
     },
   },
+  [Role.MASON]: {
+    summon_message: "Mason, wake up. Find your partner.",
+    end_message: "Good night, Mason.",
+    timer: 10000,
+  },
   [Role.HEALER]: {
     summon_message: "Healer, wake up. Pick a player to heal.",
     end_message: "Good night, healer.",
@@ -114,6 +119,7 @@ export const RandomRole = {
     Role.VETERAN,
     Role.SPY,
     Role.INVESTIGATOR,
+    Role.MASON,
   ],
   [RoleSlotType.TOWN_ATCK]: [Role.VETERAN, Role.PRIEST],
   [RoleSlotType.WOLF_RAND]: [Role.WEREWOLF, Role.WOLF_SEER],
@@ -132,5 +138,6 @@ export const RandomRole = {
     Role.ARSONIST,
     Role.JESTER,
     Role.Fool,
+    Role.MASON,
   ],
 };

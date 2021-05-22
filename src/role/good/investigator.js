@@ -26,10 +26,11 @@ export class Investigator extends Player {
 
     switch (this.target.role) {
       case Role.VILLAGER:
+      case Role.MASON:
       case Role.ARSONIST:
       case Role.VETERAN:
         this.sendMessage(
-          "Your target could be a Villager, Arsonist or Veteran"
+          "Your target could be a Villager, Mason, Arsonist or Veteran"
         );
         break;
       case Role.DEATH_WITCH:

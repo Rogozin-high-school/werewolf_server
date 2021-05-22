@@ -29,6 +29,7 @@ export const Role = {
 
     // Town protective
     HEALER: "HEALER",
+    MASON: "MASON",
 
     // Town informative
     SEER: "SEER",
@@ -92,6 +93,7 @@ export const NightPlayOrder = [
     Role.HEALER,
     Role.SEER,
     Role.PRIEST,
+    Role.MASON,
     Role.ARSONIST,
     Role.INVESTIGATOR,
     Role.SPY,
@@ -126,6 +128,7 @@ export const WolfSeerResults = dict(
     [Role.INVESTIGATOR, "Your target has so much paperwork. They must be an investigator!"],
     [Role.VETERAN, "You found a gun at your target's house. They are a veteran!"],
     [Role.PRIEST, "Your target is worshiping God. They must be a priest!"],
+    [Role.MASON, "Your target always seems to walk with another. They must be a mason!"],
     [Role.WEREWOLF, "That person works with you. They are a werewolf!"],
     [Role.WOLF_SEER, "It's like looking at a mirror. Your target is a wolf seer!"],
     [Role.WITCH, "Your target casts mystical spells. They must be a witch!"],
