@@ -21,7 +21,7 @@ export function randomAvatar() {
     let gender = genders[randInt(2)];
     let style = [ 'cm', 5 ];
     let traits = randTraits(getTraits(gender[0],style[0]));
-    traits = traits.filter(t => (Math.random() < 0.5) || ~mandatory_traits.indexOf(t[0]));
+    traits = traits.filter(t => (Math.random() < 0.3) || ~mandatory_traits.indexOf(t[0]));
 
     let outfit = randOutfit(getOutfits(randBrand(getBrands(gender[0]))));
 
