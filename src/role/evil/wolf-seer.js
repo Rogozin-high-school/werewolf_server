@@ -1,5 +1,5 @@
 import { Player } from "../player";
-import { Role, Alignment, Faction } from "../../game-enums";
+import { Role, Alignment, Faction, WolfSeerResults } from "../../game-enums";
 
 export class WolfSeer extends Player {
   init() {
